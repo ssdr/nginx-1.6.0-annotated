@@ -467,19 +467,21 @@ ngx_http_ssi_body_filter(ngx_http_request_t *r, ngx_chain_t *in)
             ngx_log_debug2(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
                            "saved: %d state: %d", ctx->saved, ctx->state);
 
+			// 解析ssi
             rc = ngx_http_ssi_parse(r, ctx);
 
             ngx_log_debug4(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
                            "parse: %d, looked: %d %p-%p",
                            rc, ctx->looked, ctx->copy_start, ctx->copy_end);
 
+			// 解析失败
             if (rc == NGX_ERROR) {
                 return rc;
             }
 
-            if (ctx->copy_start != ctx->copy_end) {
+            if (ctx->copy_start != ctx->copy_end) { // copy有效
 
-                if (ctx->output) {
+                if (ctx->output) { // output不为空
 
                     ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
                                    "saved: %d", ctx->saved);
@@ -559,7 +561,7 @@ ngx_http_ssi_body_filter(ngx_http_request_t *r, ngx_chain_t *in)
                     *ctx->last_out = cl;
                     ctx->last_out = &cl->next;
 
-                } else {
+                } else { // output为空
                     if (ctx->block
                         && ctx->saved + (ctx->copy_end - ctx->copy_start))
                     {
@@ -603,7 +605,7 @@ ngx_http_ssi_body_filter(ngx_http_request_t *r, ngx_chain_t *in)
 
                     ctx->saved = 0;
                 }
-            }
+            } // end copy
 
             if (ctx->state == ssi_start_state) {
                 ctx->copy_start = ctx->pos;
@@ -614,6 +616,7 @@ ngx_http_ssi_body_filter(ngx_http_request_t *r, ngx_chain_t *in)
                 ctx->copy_end = NULL;
             }
 
+			// 解析中断
             if (rc == NGX_AGAIN) {
                 continue;
             }
@@ -621,6 +624,7 @@ ngx_http_ssi_body_filter(ngx_http_request_t *r, ngx_chain_t *in)
 
             b = NULL;
 
+			// 解析成功
             if (rc == NGX_OK) {
 
                 smcf = ngx_http_get_module_main_conf(r,
@@ -804,6 +808,7 @@ ngx_http_ssi_body_filter(ngx_http_request_t *r, ngx_chain_t *in)
                     }
                 }
 
+				// ssi指令的回调函数
                 rc = cmd->handler(r, ctx, params);
 
                 if (rc == NGX_OK) {
@@ -854,7 +859,7 @@ ngx_http_ssi_body_filter(ngx_http_request_t *r, ngx_chain_t *in)
             ctx->last_out = &cl->next;
 
             continue;
-        }
+        } // 内while循环
 
         if (ctx->buf->last_buf || ngx_buf_in_memory(ctx->buf)) {
             if (b == NULL) {
@@ -896,7 +901,7 @@ ngx_http_ssi_body_filter(ngx_http_request_t *r, ngx_chain_t *in)
         ctx->buf = NULL;
 
         ctx->saved = ctx->looked;
-    }
+    } //外while循环
 
     if (ctx->out == NULL && ctx->busy == NULL) {
         return NGX_OK;
@@ -998,12 +1003,15 @@ ngx_http_ssi_parse(ngx_http_request_t *r, ngx_http_ssi_ctx_t *ctx)
 
         ch = *p;
 
+		// 命令解析入口
         if (state == ssi_start_state) {
 
             /* the tight loop */
 
             for ( ;; ) {
                 if (ch == '<') {
+					// <!--#...
+					// | we got here
                     copy_end = p;
                     looked = 1;
                     state = ssi_tag_state;
@@ -1027,6 +1035,7 @@ ngx_http_ssi_parse(ngx_http_request_t *r, ngx_http_ssi_ctx_t *ctx)
                 ctx->copy_start = ctx->buf->pos;
             }
 
+			// 没有ssi标记
             return NGX_AGAIN;
 
         tag_started:
@@ -1043,6 +1052,8 @@ ngx_http_ssi_parse(ngx_http_request_t *r, ngx_http_ssi_ctx_t *ctx)
         case ssi_tag_state:
             switch (ch) {
             case '!':
+				// <!--#include virtual="/abc.html"-->
+				//  | we got here
                 looked = 2;
                 state = ssi_comment0_state;
                 break;
@@ -1063,6 +1074,8 @@ ngx_http_ssi_parse(ngx_http_request_t *r, ngx_http_ssi_ctx_t *ctx)
         case ssi_comment0_state:
             switch (ch) {
             case '-':
+				// <!--#include virtual="/abc.html"-->
+				//   | we got here
                 looked = 3;
                 state = ssi_comment1_state;
                 break;
@@ -1085,6 +1098,8 @@ ngx_http_ssi_parse(ngx_http_request_t *r, ngx_http_ssi_ctx_t *ctx)
         case ssi_comment1_state:
             switch (ch) {
             case '-':
+				// <!--#include virtual="/abc.html"-->
+				//    | we got here
                 looked = 4;
                 state = ssi_sharp_state;
                 break;
@@ -1107,6 +1122,8 @@ ngx_http_ssi_parse(ngx_http_request_t *r, ngx_http_ssi_ctx_t *ctx)
         case ssi_sharp_state:
             switch (ch) {
             case '#':
+				// <!--#include virtual="/abc.html"-->
+				//     | we got here
                 if (p - ctx->pos < 4) {
                     ctx->saved = 0;
                 }
@@ -1138,6 +1155,8 @@ ngx_http_ssi_parse(ngx_http_request_t *r, ngx_http_ssi_ctx_t *ctx)
                 break;
 
             default:
+				// <!--#include virtual="/abc.html"-->
+				//      | we got here
                 ctx->command.len = 1;
                 ctx->command.data = ngx_pnalloc(r->pool,
                                                 NGX_HTTP_SSI_COMMAND_LEN);
@@ -1172,6 +1191,9 @@ ngx_http_ssi_parse(ngx_http_request_t *r, ngx_http_ssi_ctx_t *ctx)
                 break;
 
             default:
+				// <!--#include ...
+				//       | we got here at first
+				//            | and here last, then go ssi_preparam_state
                 if (ctx->command.len == NGX_HTTP_SSI_COMMAND_LEN) {
                     ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
                                   "the \"%V%c...\" SSI command is too long",
@@ -1200,6 +1222,8 @@ ngx_http_ssi_parse(ngx_http_request_t *r, ngx_http_ssi_ctx_t *ctx)
                 break;
 
             default:
+				// <!--# include virtual="/abc.html"-->
+				//               | now we got here
                 ctx->param = ngx_array_push(&ctx->params);
                 if (ctx->param == NULL) {
                     return NGX_ERROR;
@@ -1243,6 +1267,8 @@ ngx_http_ssi_parse(ngx_http_request_t *r, ngx_http_ssi_ctx_t *ctx)
                 break;
 
             case '=':
+				// <!--# include virtual="/abc.html"-->
+				//                      | we got here
                 state = ssi_prevalue_state;
                 break;
 
@@ -1256,6 +1282,9 @@ ngx_http_ssi_parse(ngx_http_request_t *r, ngx_http_ssi_ctx_t *ctx)
                 break;
 
             default:
+				// <!--# include virtual="/abc.html"-->
+				//                | here first
+				//                     | here last, then go case '='
                 if (ctx->param->key.len == NGX_HTTP_SSI_PARAM_LEN) {
                     state = ssi_error_state;
                     ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
@@ -1307,6 +1336,8 @@ ngx_http_ssi_parse(ngx_http_request_t *r, ngx_http_ssi_ctx_t *ctx)
                 break;
 
             case '"':
+				// <!--# include virtual="/abc.html"-->
+				//                       | we got here
                 state = ssi_double_quoted_value_state;
                 break;
 
@@ -1333,6 +1364,8 @@ ngx_http_ssi_parse(ngx_http_request_t *r, ngx_http_ssi_ctx_t *ctx)
         case ssi_double_quoted_value_state:
             switch (ch) {
             case '"':
+				// <!--# include virtual="/abc.html"-->
+				//                                 | we got here
                 state = ssi_postparam_state;
                 break;
 
@@ -1343,6 +1376,9 @@ ngx_http_ssi_parse(ngx_http_request_t *r, ngx_http_ssi_ctx_t *ctx)
                 /* fall through */
 
             default:
+				// <!--# include virtual="/abc.html"-->
+				//                        | we got here first
+				//                                | here last, then go case '"'
                 if (ctx->param->value.len == ctx->value_len) {
                     ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
                                   "too long \"%V%c...\" value of \"%V\" "
@@ -1430,6 +1466,8 @@ ngx_http_ssi_parse(ngx_http_request_t *r, ngx_http_ssi_ctx_t *ctx)
                 break;
 
             case '-':
+				// <!--# include virtual="/abc.html"-->
+				//                                  | we got here
                 state = ssi_comment_end0_state;
                 break;
 
@@ -1448,6 +1486,8 @@ ngx_http_ssi_parse(ngx_http_request_t *r, ngx_http_ssi_ctx_t *ctx)
         case ssi_comment_end0_state:
             switch (ch) {
             case '-':
+				// <!--# include virtual="/abc.html"-->
+				//                                   | we got here
                 state = ssi_comment_end1_state;
                 break;
 
@@ -1464,6 +1504,8 @@ ngx_http_ssi_parse(ngx_http_request_t *r, ngx_http_ssi_ctx_t *ctx)
         case ssi_comment_end1_state:
             switch (ch) {
             case '>':
+				// <!--# include virtual="/abc.html"-->
+				//                                    | we got here
                 ctx->state = ssi_start_state;
                 ctx->pos = p + 1;
                 ctx->looked = looked;
@@ -1473,6 +1515,7 @@ ngx_http_ssi_parse(ngx_http_request_t *r, ngx_http_ssi_ctx_t *ctx)
                     ctx->copy_start = ctx->buf->pos;
                 }
 
+				// 解析结束, 注意这只是完成了一句ssi指令的解析
                 return NGX_OK;
 
             default:
