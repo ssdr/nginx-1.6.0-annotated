@@ -1,0 +1,17 @@
+K 25
+svn:wc:ra_dav:version-url
+V 105
+/svn/TechRADCenter/!svn/ver/29978/Arch/izeus/code/kuaibo/vdn/nginx-live-p2p/src/http/p2p_live_head_module
+END
+ngx_http_live_head_module.c
+K 25
+svn:wc:ra_dav:version-url
+V 133
+/svn/TechRADCenter/!svn/ver/29978/Arch/izeus/code/kuaibo/vdn/nginx-live-p2p/src/http/p2p_live_head_module/ngx_http_live_head_module.c
+END
+config
+K 25
+svn:wc:ra_dav:version-url
+V 112
+/svn/TechRADCenter/!svn/ver/27981/Arch/izeus/code/kuaibo/vdn/nginx-live-p2p/src/http/p2p_live_head_module/config
+END
