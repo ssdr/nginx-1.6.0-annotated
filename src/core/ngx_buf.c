@@ -130,10 +130,12 @@ ngx_chain_add_copy(ngx_pool_t *pool, ngx_chain_t **chain, ngx_chain_t *in)
 
     ll = chain;
 
+	// 遍历到chain末尾
     for (cl = *chain; cl; cl = cl->next) {
         ll = &cl->next;
     }
 
+	// 创建并拷贝到新chain
     while (in) {
         cl = ngx_alloc_chain_link(pool);
         if (cl == NULL) {

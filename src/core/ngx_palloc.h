@@ -54,6 +54,7 @@ typedef struct {
 } ngx_pool_data_t;
 
 
+// 内存池
 struct ngx_pool_s {
     ngx_pool_data_t       d;
     size_t                max;

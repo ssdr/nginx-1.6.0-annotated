@@ -809,6 +809,7 @@ ngx_http_ssi_body_filter(ngx_http_request_t *r, ngx_chain_t *in)
                 }
 
 				// ssi指令的回调函数
+				// 此处include指令需要生成子请求，可以单独处理
                 rc = cmd->handler(r, ctx, params);
 
                 if (rc == NGX_OK) {
@@ -819,7 +820,7 @@ ngx_http_ssi_body_filter(ngx_http_request_t *r, ngx_chain_t *in)
                     ngx_http_ssi_buffered(r, ctx);
                     return rc;
                 }
-            }
+            } // end of NGX_OK
 
 
             /* rc == NGX_HTTP_SSI_ERROR */
@@ -902,6 +903,8 @@ ngx_http_ssi_body_filter(ngx_http_request_t *r, ngx_chain_t *in)
 
         ctx->saved = ctx->looked;
     } //外while循环
+	
+	// include指令发送subrequest...
 
     if (ctx->out == NULL && ctx->busy == NULL) {
         return NGX_OK;
@@ -987,6 +990,10 @@ ngx_http_ssi_buffered(ngx_http_request_t *r, ngx_http_ssi_ctx_t *ctx)
 }
 
 
+/*
+ * parse function
+ * return NGX_OK/NGX_ERROR/NGX_AGAIN
+ */
 static ngx_int_t
 ngx_http_ssi_parse(ngx_http_request_t *r, ngx_http_ssi_ctx_t *ctx)
 {
@@ -2022,6 +2029,7 @@ ngx_http_ssi_regex_match(ngx_http_request_t *r, ngx_str_t *pattern,
 }
 
 
+// include指令的回调函数
 static ngx_int_t
 ngx_http_ssi_include(ngx_http_request_t *r, ngx_http_ssi_ctx_t *ctx,
     ngx_str_t **params)
@@ -2043,6 +2051,7 @@ ngx_http_ssi_include(ngx_http_request_t *r, ngx_http_ssi_ctx_t *ctx,
     set = params[NGX_HTTP_SSI_INCLUDE_SET];
     stub = params[NGX_HTTP_SSI_INCLUDE_STUB];
 
+	// uri和file有且只能有一个有效
     if (uri && file) {
         ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
                       "inlcusion may be either virtual=\"%V\" or file=\"%V\"",
@@ -2110,6 +2119,7 @@ ngx_http_ssi_include(ngx_http_request_t *r, ngx_http_ssi_ctx_t *ctx,
 
     mctx = ngx_http_get_module_ctx(r->main, ngx_http_ssi_filter_module);
 
+	// stub, used with block
     if (stub) {
         if (mctx->blocks) {
             bl = mctx->blocks->elts;
@@ -2128,11 +2138,14 @@ ngx_http_ssi_include(ngx_http_request_t *r, ngx_http_ssi_ctx_t *ctx,
 
     found:
 
+		// 创建并发送子请求
+
         psr = ngx_palloc(r->pool, sizeof(ngx_http_post_subrequest_t));
         if (psr == NULL) {
             return NGX_ERROR;
         }
 
+		//
         psr->handler = ngx_http_ssi_stub_output;
 
         if (bl[i].count++) {
@@ -2181,6 +2194,7 @@ ngx_http_ssi_include(ngx_http_request_t *r, ngx_http_ssi_ctx_t *ctx,
         flags |= NGX_HTTP_SUBREQUEST_WAITED;
     }
 
+	// set
     if (set) {
         key = ngx_hash_strlow(set->data, set->data, set->len);
 
@@ -2189,6 +2203,7 @@ ngx_http_ssi_include(ngx_http_request_t *r, ngx_http_ssi_ctx_t *ctx,
             return NGX_ERROR;
         }
 
+		//
         psr->handler = ngx_http_ssi_set_variable;
         psr->data = ngx_http_ssi_get_variable(r, set, key);
 
@@ -2216,7 +2231,7 @@ ngx_http_ssi_include(ngx_http_request_t *r, ngx_http_ssi_ctx_t *ctx,
         flags |= NGX_HTTP_SUBREQUEST_IN_MEMORY|NGX_HTTP_SUBREQUEST_WAITED;
     }
 
-	// subrequest
+	// 发送子请求
     if (ngx_http_subrequest(r, uri, &args, &sr, psr, flags) != NGX_OK) {
         return NGX_HTTP_SSI_ERROR;
     }
@@ -2408,6 +2423,7 @@ ngx_http_ssi_echo(ngx_http_request_t *r, ngx_http_ssi_ctx_t *ctx,
     b->pos = p;
     b->last = p + len;
 
+	// 将buf放到chain里，将chain挂到ctx->last_out末尾
     cl->buf = b;
     cl->next = NULL;
     *ctx->last_out = cl;

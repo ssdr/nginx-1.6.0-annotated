@@ -116,6 +116,7 @@ ngx_reset_pool(ngx_pool_t *pool)
 }
 
 
+// 在pool中分配内存
 void *
 ngx_palloc(ngx_pool_t *pool, size_t size)
 {
@@ -126,6 +127,7 @@ ngx_palloc(ngx_pool_t *pool, size_t size)
 
         p = pool->current;
 
+		// 在当前pool中分配
         do {
             m = ngx_align_ptr(p->d.last, NGX_ALIGNMENT);
 
@@ -139,6 +141,7 @@ ngx_palloc(ngx_pool_t *pool, size_t size)
 
         } while (p);
 
+		// 在新pool中分配
         return ngx_palloc_block(pool, size);
     }
 

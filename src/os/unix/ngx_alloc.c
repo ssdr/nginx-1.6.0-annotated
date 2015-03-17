@@ -14,6 +14,7 @@ ngx_uint_t  ngx_pagesize_shift;
 ngx_uint_t  ngx_cacheline_size;
 
 
+// 封装malloc
 void *
 ngx_alloc(size_t size, ngx_log_t *log)
 {
@@ -31,6 +32,7 @@ ngx_alloc(size_t size, ngx_log_t *log)
 }
 
 
+// 封装malloc并清零
 void *
 ngx_calloc(size_t size, ngx_log_t *log)
 {
