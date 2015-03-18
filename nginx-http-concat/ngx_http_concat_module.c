@@ -16,6 +16,9 @@ typedef struct {
     ngx_str_t    delimiter;
     ngx_flag_t   ignore_file_error;
 
+	// 是否携带每个文件的大小，默认关闭，add by liuyan
+	ngx_flag_t   with_file_size;
+
     ngx_hash_t   types;
     ngx_array_t *types_keys;
 } ngx_http_concat_loc_conf_t;
@@ -80,6 +83,13 @@ static ngx_command_t  ngx_http_concat_commands[] = {
       offsetof(ngx_http_concat_loc_conf_t, ignore_file_error),
       NULL },
 
+	{ ngx_string("concat_with_file_size"),
+      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_FLAG,
+      ngx_conf_set_flag_slot,
+      NGX_HTTP_LOC_CONF_OFFSET,
+      offsetof(ngx_http_concat_loc_conf_t, with_file_size),
+      NULL },
+
       ngx_null_command
 };
 
@@ -122,6 +132,7 @@ ngx_http_concat_handler(ngx_http_request_t *r)
     size_t                      root, last_len;
     time_t                      last_modified;
     u_char                     *p, *v, *e, *last, *last_type;
+	unsigned int               *filesz;
     ngx_int_t                   rc;
     ngx_str_t                  *uri, *filename, path;
     ngx_buf_t                  *b;
@@ -351,6 +362,40 @@ ngx_http_concat_handler(ngx_http_request_t *r)
             }
         }
 
+		// here we add a file size in buf
+		if(clcf->with_file_size) {
+			b = ngx_pcalloc(r->pool, sizeof(ngx_buf_t));
+			if (b == NULL) {
+				return NGX_HTTP_INTERNAL_SERVER_ERROR;
+			}
+
+			filesz = ngx_pcalloc(r->pool, sizeof(unsigned int));
+			*filesz = (unsigned int)of.size;
+			b->pos = (u_char *)filesz;
+			b->last = (u_char *)filesz+sizeof(unsigned int);
+			b->memory = 1;
+			length += sizeof(unsigned int);
+
+			if(last_out == NULL) {
+				out.buf = b;
+				last_out = &out.next;
+				out.next = NULL;
+
+			} else {
+				cl = ngx_alloc_chain_link(r->pool);
+				if (cl == NULL) {
+					return NGX_HTTP_INTERNAL_SERVER_ERROR;
+				}
+
+				cl->buf = b;
+				*last_out = cl;
+				last_out = &cl->next;
+				cl->next = NULL;
+			}
+		}
+  		// end here
+
+
         b = ngx_pcalloc(r->pool, sizeof(ngx_buf_t));
         if (b == NULL) {
             return NGX_HTTP_INTERNAL_SERVER_ERROR;
@@ -511,6 +556,7 @@ ngx_http_concat_create_loc_conf(ngx_conf_t *cf)
     conf->ignore_file_error = NGX_CONF_UNSET;
     conf->max_files = NGX_CONF_UNSET_UINT;
     conf->unique = NGX_CONF_UNSET;
+	conf->with_file_size = NGX_CONF_UNSET;
 
     return conf;
 }
@@ -527,6 +573,7 @@ ngx_http_concat_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
     ngx_conf_merge_value(conf->ignore_file_error, prev->ignore_file_error, 0);
     ngx_conf_merge_uint_value(conf->max_files, prev->max_files, 10);
     ngx_conf_merge_value(conf->unique, prev->unique, 1);
+    ngx_conf_merge_value(conf->with_file_size, prev->with_file_size, 0);
 
     if (ngx_http_merge_types(cf, &conf->types_keys, &conf->types,
                              &prev->types_keys, &prev->types,
