@@ -1,0 +1,219 @@
+
+/*
+ * Copyright (C) Igor Sysoev
+ * Copyright (C) Nginx, Inc.
+ */
+
+
+#include <ngx_config.h>
+#include <ngx_core.h>
+#include <ngx_http.h>
+
+
+static char *ngx_http_live_head(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
+static ngx_int_t ngx_http_live_head_handler(ngx_http_request_t *r);
+
+
+static ngx_command_t ngx_http_live_head_commands[] = {
+    { ngx_string("live_head"),
+      NGX_HTTP_LOC_CONF|NGX_CONF_NOARGS,
+      ngx_http_live_head,
+      0,
+      0,
+      NULL },
+
+      ngx_null_command
+};
+
+
+ngx_http_module_t  ngx_http_live_head_module_ctx = {
+    NULL,                                  /* preconfiguration */
+    NULL,                                  /* postconfiguration */
+
+    NULL,                                  /* create main configuration */
+    NULL,                                  /* init main configuration */
+
+    NULL,                                  /* create server configuration */
+    NULL,                                  /* merge server configuration */
+
+    NULL,                                  /* create location configuration */
+    NULL                                   /* merge location configuration */
+};
+
+
+ngx_module_t  ngx_http_live_head_module = {
+    NGX_MODULE_V1,
+    &ngx_http_live_head_module_ctx,        /* module context */
+    ngx_http_live_head_commands,           /* module directives */
+    NGX_HTTP_MODULE,                       /* module type */
+    NULL,                                  /* init master */
+    NULL,                                  /* init module */
+    NULL,                                  /* init process */
+    NULL,                                  /* init thread */
+    NULL,                                  /* exit thread */
+    NULL,                                  /* exit process */
+    NULL,                                  /* exit master */
+    NGX_MODULE_V1_PADDING
+};
+
+static char *
+ngx_http_live_head(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+{
+    ngx_http_core_loc_conf_t  *clcf;
+
+    clcf = ngx_http_conf_get_module_loc_conf(cf, ngx_http_core_module);
+    // 按需挂载handler
+    clcf->handler = ngx_http_live_head_handler;
+
+    return NGX_CONF_OK;
+}
+
+static ngx_int_t
+ngx_http_live_head_handler(ngx_http_request_t *r)
+{
+    ngx_int_t                  rc;
+    ngx_int_t                  error_n;
+    ngx_str_t                  value;
+    ngx_int_t                  index;
+    ngx_log_t                 *log;
+    ngx_inotify_t             *intf;
+    ngx_chain_t               *out;
+    ngx_buf_t                 *buf;
+    ngx_file_t                *file;
+    ngx_http_core_loc_conf_t  *clcf;
+    ngx_open_file_info_t       of;
+    
+    // 请求的有效性判断
+    if (!(r->method & (NGX_HTTP_GET|NGX_HTTP_HEAD|NGX_HTTP_POST))) {
+        return NGX_HTTP_NOT_ALLOWED;
+    }
+    if (r->uri.data[r->uri.len - 1] == '/') {
+        return NGX_DECLINED;
+    }
+    
+    // 丢弃请求体
+    rc = ngx_http_discard_request_body(r);
+    if (rc != NGX_OK) {
+        return rc;
+    }
+    
+    //必须包含channel_id参数，否则禁止请求
+    if (r->args.len <= 0) {
+        // 添加其他错误到头部
+        error_n = NGX_HTTP_FORBIDDEN_OTHERS;
+        goto FORBIDDEN;
+    }
+
+    //必须包含channel_id参数且值为数字，否则禁止请求
+    rc = ngx_http_arg(r, (u_char *)"channel_id", 10, &value);
+    // 查找channel id
+    for (index = 0; index < ngx_cycle->intf_num; ++index) {
+        if (value.len == ngx_cycle->inotifys[index].id.len && 
+            ngx_strncmp(value.data, ngx_cycle->inotifys[index].id.data, value.len) == 0)
+            break;
+    }
+    if (NGX_OK != rc || index >= ngx_cycle->intf_num)  {
+        // 添加channel_id错误到头部
+        error_n = NGX_HTTP_FORBIDDEN_INVALIDATE_CHANNELID;
+        goto FORBIDDEN;
+    }
+    // 设置对应事件
+    r->intf = &ngx_cycle->inotifys[index];
+
+
+    log = r->connection->log;
+    ngx_log_error(NGX_LOG_INFO, log, 0,
+                   "IP: %V, REQUEST URL: \"%V?%V\" ", 
+                   &r->connection->addr_text, &r->uri, &r->args);//
+    r->root_tested = !r->error_page;
+    log->action = "sending head file to client";
+
+
+    // 获取头文件
+    intf = r->intf;
+
+    clcf = ngx_http_get_module_loc_conf(r, ngx_http_core_module);
+    ngx_memzero(&of, sizeof(ngx_open_file_info_t));
+    of.read_ahead = clcf->read_ahead;
+    of.directio = clcf->directio;
+    of.valid = clcf->open_file_cache_valid;
+    of.min_uses = clcf->open_file_cache_min_uses;
+    of.errors = clcf->open_file_cache_errors;
+    of.events = clcf->open_file_cache_events;
+    if (ngx_http_set_disable_symlinks(r, clcf, &intf->head, &of) != NGX_OK) {
+        return NGX_HTTP_INTERNAL_SERVER_ERROR;
+    }
+    if (ngx_open_cached_file(clcf->open_file_cache, &intf->head, &of, r->pool) != NGX_OK) {
+        return NGX_HTTP_INTERNAL_SERVER_ERROR;
+    }
+    if (!of.is_file) {
+        if (ngx_close_file(of.fd) == NGX_FILE_ERROR) {
+            ngx_log_error(NGX_LOG_ALERT, intf->log, ngx_errno, 
+                ngx_close_file_n " \"%s\" failed", intf->head.data);
+        }
+        return NGX_HTTP_INTERNAL_SERVER_ERROR;
+    }
+
+
+    out = ngx_pcalloc(r->pool, sizeof(ngx_chain_t));
+    if (out == NULL) {
+        ngx_log_error(NGX_LOG_ALERT, intf->log, 0, "Failed to allocate response chain.");
+        return NGX_HTTP_INTERNAL_SERVER_ERROR;
+    }
+    buf = ngx_pcalloc(r->pool, sizeof(ngx_buf_t));
+    if (buf == NULL) {
+        ngx_log_error(NGX_LOG_ALERT, intf->log, 0, "Failed to allocate response buffer in chain.");
+        return NGX_HTTP_INTERNAL_SERVER_ERROR;
+    }
+
+    file = ngx_pcalloc(r->pool, sizeof(ngx_file_t));
+    if(file == NULL) {
+        ngx_log_error(NGX_LOG_ALERT, intf->log, 0, "Failed to allocate response file in buffer.");
+        return NGX_HTTP_INTERNAL_SERVER_ERROR;
+        }
+    
+    buf->file_pos = 0;
+    buf->file_last = of.size;
+    buf->in_file = buf->file_last ? 1 : 0;
+    buf->last_buf = 1;
+    buf->last_in_chain = 1;
+    
+
+    file->fd = of.fd;
+    file->name.data = file->name_vec;
+    ngx_memcpy(file->name.data, intf->head.data, intf->head.len);
+    file->name.len = intf->head.len;
+    file->log = log;
+    file->directio = of.is_directio;
+
+    buf->file = file;
+    out->buf = buf;
+    out->next = NULL;
+
+
+    //设置响应的头信息
+    r->headers_out.status = NGX_HTTP_OK;
+    r->headers_out.content_length_n = of.size;
+    r->headers_out.last_modified_time = time(NULL);
+
+    if (ngx_http_set_content_type(r) != NGX_OK) {
+        return NGX_HTTP_INTERNAL_SERVER_ERROR;
+    }
+
+    rc = ngx_http_send_header(r);
+
+    if (rc == NGX_ERROR || rc > NGX_OK || r->header_only) {
+        return rc;
+    }
+
+    return ngx_http_output_filter(r, out);
+
+
+FORBIDDEN:
+
+    rc = ngx_http_add_error_to_header(r, error_n);
+    if (NGX_ERROR == rc) {
+        return NGX_HTTP_INTERNAL_SERVER_ERROR;
+    }
+    return NGX_HTTP_FORBIDDEN;
+}

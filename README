@@ -1,4 +1,11 @@
 
 Documentation is available at http://nginx.org
 
-./configure --prefix=/data/liuyan/bin/nginx-1.6/ --add-module=./nginx_http_md5_mod/ --with-http_ssi_filter_module
+## liuyan md5
+./configure --prefix=/data/liuyan/bin/nginx-1.6/ --add-module=./nginx_http_md5_mod/
+
+## liuyan concat
+./configure --prefix=/data/liuyan/bin/nginx-1.6/ --add-module=./nginx_http_concat_mod/
+
+## taobao concat
+./configure --prefix=/data/liuyan/bin/nginx-1.6/ --add-module=./nginx-http-concat/
