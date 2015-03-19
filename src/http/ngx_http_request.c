@@ -308,6 +308,7 @@ ngx_http_init_connection(ngx_connection_t *c)
 
     c->log_error = NGX_ERROR_INFO;
 
+	// 挂载读写事件处理函数
     rev = c->read;
     rev->handler = ngx_http_wait_request_handler;
     c->write->handler = ngx_http_empty_handler;
@@ -381,10 +382,13 @@ ngx_http_wait_request_handler(ngx_event_t *rev)
     ngx_http_connection_t     *hc;
     ngx_http_core_srv_conf_t  *cscf;
 
+	// nginx中将连接结构的引用保存在事件结构的data字段
+	// 请求结构的引用则保存在连接结构的data字段
     c = rev->data;
 
     ngx_log_debug0(NGX_LOG_DEBUG_HTTP, c->log, 0, "http wait request handler");
 
+	// 超时
     if (rev->timedout) {
         ngx_log_error(NGX_LOG_INFO, c->log, NGX_ETIMEDOUT, "client timed out");
         ngx_http_close_connection(c);
@@ -425,6 +429,7 @@ ngx_http_wait_request_handler(ngx_event_t *rev)
         b->end = b->last + size;
     }
 
+	// 读取请求数据
     n = c->recv(c, b->last, size);
 
     if (n == NGX_AGAIN) {
@@ -496,7 +501,7 @@ ngx_http_wait_request_handler(ngx_event_t *rev)
     }
 
     rev->handler = ngx_http_process_request_line;
-    ngx_http_process_request_line(rev);
+    ngx_http_process_request_line(rev); // 解析请求行
 }
 
 

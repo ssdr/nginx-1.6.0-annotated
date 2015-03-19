@@ -59,6 +59,7 @@ ngx_event_accept(ngx_event_t *ev)
     do {
         socklen = NGX_SOCKADDRLEN;
 
+		// accept客户端请求
 #if (NGX_HAVE_ACCEPT4)
         if (use_accept4) {
             s = accept4(lc->fd, (struct sockaddr *) sa, &socklen,
@@ -141,6 +142,7 @@ ngx_event_accept(ngx_event_t *ev)
         ngx_accept_disabled = ngx_cycle->connection_n / 8
                               - ngx_cycle->free_connection_n;
 
+		// 获取一个连接结构
         c = ngx_get_connection(s, ev->log);
 
         if (c == NULL) {
@@ -156,6 +158,7 @@ ngx_event_accept(ngx_event_t *ev)
         (void) ngx_atomic_fetch_add(ngx_stat_active, 1);
 #endif
 
+		// 给连接分配内存池
         c->pool = ngx_create_pool(ls->pool_size, ev->log);
         if (c->pool == NULL) {
             ngx_close_accepted_connection(c);
@@ -201,6 +204,7 @@ ngx_event_accept(ngx_event_t *ev)
 
         *log = ls->log;
 
+		// 设置读写回调函数
         c->recv = ngx_recv;
         c->send = ngx_send;
         c->recv_chain = ngx_recv_chain;
@@ -230,6 +234,7 @@ ngx_event_accept(ngx_event_t *ev)
         rev = c->read;
         wev = c->write;
 
+		// 连接的写事件已就绪，nginx默认连接第一次为可写
         wev->ready = 1;
 
         if (ngx_event_flags & (NGX_USE_AIO_EVENT|NGX_USE_RTSIG_EVENT)) {

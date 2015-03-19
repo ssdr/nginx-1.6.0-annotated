@@ -182,6 +182,7 @@ ngx_event_module_t  ngx_event_core_module_ctx = {
 };
 
 
+// ngx_event_core_module重要*****
 ngx_module_t  ngx_event_core_module = {
     NGX_MODULE_V1,
     &ngx_event_core_module_ctx,            /* module context */
@@ -628,10 +629,12 @@ ngx_event_process_init(ngx_cycle_t *cycle)
     }
 #endif
 
+	// 初始化用来管理所有定时器的红黑树
     if (ngx_event_timer_init(cycle->log) == NGX_ERROR) {
         return NGX_ERROR;
     }
 
+	// 初始化事件模型
     for (m = 0; ngx_modules[m]; m++) {
         if (ngx_modules[m]->type != NGX_EVENT_MODULE) {
             continue;
@@ -698,6 +701,7 @@ ngx_event_process_init(ngx_cycle_t *cycle)
 
 #endif
 
+	// 分配连接结构
     cycle->connections =
         ngx_alloc(sizeof(ngx_connection_t) * cycle->connection_n, cycle->log);
     if (cycle->connections == NULL) {
@@ -706,6 +710,7 @@ ngx_event_process_init(ngx_cycle_t *cycle)
 
     c = cycle->connections;
 
+	// 分配读事件
     cycle->read_events = ngx_alloc(sizeof(ngx_event_t) * cycle->connection_n,
                                    cycle->log);
     if (cycle->read_events == NULL) {
@@ -722,6 +727,7 @@ ngx_event_process_init(ngx_cycle_t *cycle)
 #endif
     }
 
+	// 分配写事件
     cycle->write_events = ngx_alloc(sizeof(ngx_event_t) * cycle->connection_n,
                                     cycle->log);
     if (cycle->write_events == NULL) {
@@ -740,6 +746,7 @@ ngx_event_process_init(ngx_cycle_t *cycle)
     i = cycle->connection_n;
     next = NULL;
 
+	// 为每个连接设置读写事件结构
     do {
         i--;
 
@@ -760,6 +767,7 @@ ngx_event_process_init(ngx_cycle_t *cycle)
 
     /* for each listening socket */
 
+	// 为每一个监听套接字分配一个连接结构
     ls = cycle->listening.elts;
     for (i = 0; i < cycle->listening.nelts; i++) {
 
@@ -841,12 +849,14 @@ ngx_event_process_init(ngx_cycle_t *cycle)
 
 #else
 
+		// 设置读事件结构的处理函数
         rev->handler = ngx_event_accept;
 
         if (ngx_use_accept_mutex) {
             continue;
         }
 
+		// 将该监听句柄挂载到事件处理模型
         if (ngx_event_flags & NGX_USE_RTSIG_EVENT) {
             if (ngx_add_conn(c) == NGX_ERROR) {
                 return NGX_ERROR;
