@@ -36,6 +36,7 @@ static ngx_connection_t  dumb;
 /* STUB */
 
 
+// this function is really really pretty long!!!
 ngx_cycle_t *
 ngx_init_cycle(ngx_cycle_t *old_cycle)
 {

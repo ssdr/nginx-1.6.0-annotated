@@ -208,10 +208,12 @@ main(int argc, char *const *argv)
 
     ngx_debug_init();
 
+	// 错误列表初始化
     if (ngx_strerror_init() != NGX_OK) {
         return 1;
     }
 
+	// 命令行解析
     if (ngx_get_options(argc, argv) != NGX_OK) {
         return 1;
     }
@@ -277,6 +279,7 @@ main(int argc, char *const *argv)
 
     ngx_pid = ngx_getpid();
 
+	// 日志初始化
     log = ngx_log_init(ngx_prefix);
     if (log == NULL) {
         return 1;
@@ -296,6 +299,7 @@ main(int argc, char *const *argv)
     init_cycle.log = log;
     ngx_cycle = &init_cycle;
 
+	// 创建内存池
     init_cycle.pool = ngx_create_pool(1024, log);
     if (init_cycle.pool == NULL) {
         return 1;
@@ -309,6 +313,7 @@ main(int argc, char *const *argv)
         return 1;
     }
 
+	// 操作系统相关初始化
     if (ngx_os_init(log) != NGX_OK) {
         return 1;
     }
@@ -325,11 +330,13 @@ main(int argc, char *const *argv)
         return 1;
     }
 
+	// 设置模块索引
     ngx_max_module = 0;
     for (i = 0; ngx_modules[i]; i++) {
         ngx_modules[i]->index = ngx_max_module++;
     }
 
+	// cycle初始化，pretty long !!!
     cycle = ngx_init_cycle(&init_cycle);
     if (cycle == NULL) {
         if (ngx_test_config) {
@@ -349,6 +356,7 @@ main(int argc, char *const *argv)
         return 0;
     }
 
+	// -s 信号处理
     if (ngx_signal) {
         return ngx_signal_process(cycle, ngx_signal);
     }
@@ -400,6 +408,7 @@ main(int argc, char *const *argv)
 
     ngx_use_stderr = 0;
 
+	// 启动进程
     if (ngx_process == NGX_PROCESS_SINGLE) {
         ngx_single_process_cycle(cycle);
 

@@ -133,6 +133,7 @@ ngx_master_process_cycle(ngx_cycle_t *cycle)
 
     ccf = (ngx_core_conf_t *) ngx_get_conf(cycle->conf_ctx, ngx_core_module);
 
+	// 启动工作进程
     ngx_start_worker_processes(cycle, ccf->worker_processes,
                                NGX_PROCESS_RESPAWN);
     ngx_start_cache_manager_processes(cycle, 0);
@@ -142,6 +143,7 @@ ngx_master_process_cycle(ngx_cycle_t *cycle)
     sigio = 0;
     live = 1;
 
+	// 父进程做管理工作
     for ( ;; ) {
         if (delay) {
             if (ngx_sigalrm) {
@@ -290,6 +292,7 @@ ngx_master_process_cycle(ngx_cycle_t *cycle)
 }
 
 
+// 单进程模式
 void
 ngx_single_process_cycle(ngx_cycle_t *cycle)
 {
@@ -813,6 +816,7 @@ ngx_worker_process_cycle(ngx_cycle_t *cycle, void *data)
 
         ngx_log_debug0(NGX_LOG_DEBUG_EVENT, cycle->log, 0, "worker cycle");
 
+		// 真正处理工作的地方
         ngx_process_events_and_timers(cycle);
 
         if (ngx_terminate) {

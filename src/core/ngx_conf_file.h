@@ -101,7 +101,7 @@ struct ngx_open_file_s {
 
 struct ngx_module_s {
     ngx_uint_t            ctx_index;
-    ngx_uint_t            index;
+    ngx_uint_t            index; // 模块在集合中的索引
 
     ngx_uint_t            spare0;
     ngx_uint_t            spare1;
