@@ -131,8 +131,8 @@ ngx_http_concat_handler(ngx_http_request_t *r)
     off_t                       length;
     size_t                      root, last_len;
     time_t                      last_modified;
-    u_char                     *p, *v, *e, *last, *last_type;
-	unsigned int               *filesz;
+    u_char                     *p, *v, *e, *last, *last_type, *c;
+	unsigned int               *filesz, size;
     ngx_int_t                   rc;
     ngx_str_t                  *uri, *filename, path;
     ngx_buf_t                  *b;
@@ -362,7 +362,8 @@ ngx_http_concat_handler(ngx_http_request_t *r)
             }
         }
 
-		// here we add a file size in buf
+		// 这里在每个文件内容前面添加四字节的文件长度
+		// 为了兼容不同系统，做个小端存储吧
 		if(clcf->with_file_size) {
 			b = ngx_pcalloc(r->pool, sizeof(ngx_buf_t));
 			if (b == NULL) {
@@ -370,7 +371,12 @@ ngx_http_concat_handler(ngx_http_request_t *r)
 			}
 
 			filesz = ngx_pcalloc(r->pool, sizeof(unsigned int));
-			*filesz = (unsigned int)of.size;
+			c = (u_char *)filesz;
+			size = (unsigned int)of.size;
+			for(j=1; j<sizeof(unsigned int); j++) {
+				*c++ = size & 0x000000ff;
+				size >>= 8;
+			}
 			b->pos = (u_char *)filesz;
 			b->last = (u_char *)filesz+sizeof(unsigned int);
 			b->memory = 1;
