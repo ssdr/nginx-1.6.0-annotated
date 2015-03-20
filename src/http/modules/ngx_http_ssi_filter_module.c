@@ -446,6 +446,9 @@ ngx_http_ssi_body_filter(ngx_http_request_t *r, ngx_chain_t *in)
 
     slcf = ngx_http_get_module_loc_conf(r, ngx_http_ssi_filter_module);
 
+    ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+                   "http ssi filter 开始解析------------------------");
+	// 遍历chain
     while (ctx->in || ctx->buf) {
 
         if (ctx->buf == NULL) {
@@ -461,6 +464,9 @@ ngx_http_ssi_body_filter(ngx_http_request_t *r, ngx_chain_t *in)
 
         b = NULL;
 
+    	ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+                   "http ssi filter buffer解析**********************");
+		// 遍历buffer
         while (ctx->pos < ctx->buf->last) {
 
             ngx_log_debug2(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
@@ -903,8 +909,6 @@ ngx_http_ssi_body_filter(ngx_http_request_t *r, ngx_chain_t *in)
         ctx->saved = ctx->looked;
     } //外while循环
 	
-	// include指令发送subrequest...
-
     if (ctx->out == NULL && ctx->busy == NULL) {
         return NGX_OK;
     }

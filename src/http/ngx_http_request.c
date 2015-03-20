@@ -2195,6 +2195,7 @@ ngx_http_request_handler(ngx_event_t *ev)
 }
 
 
+// 遍历posted队列，发送子请求
 void
 ngx_http_run_posted_requests(ngx_connection_t *c)
 {

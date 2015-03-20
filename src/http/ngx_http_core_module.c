@@ -2510,7 +2510,9 @@ ngx_http_subrequest(ngx_http_request_t *r,
     sr->main = r->main;
     sr->parent = r;
     sr->post_subrequest = ps;
+	// 子请求等待发送不需要读事件回调
     sr->read_event_handler = ngx_http_request_empty_handler;
+	// 走一遍请求处理流程
     sr->write_event_handler = ngx_http_handler;
 
     if (c->data == r && r->postponed == NULL) {
@@ -2530,6 +2532,7 @@ ngx_http_subrequest(ngx_http_request_t *r,
     pr->out = NULL;
     pr->next = NULL;
 
+	// subrequest放入postponed队列末尾
     if (r->postponed) {
         for (p = r->postponed; p->next; p = p->next) { /* void */ }
         p->next = pr;
@@ -2554,6 +2557,7 @@ ngx_http_subrequest(ngx_http_request_t *r,
 
     *psr = sr;
 
+	// 将子请求放到父请求posted队列, 等待发送
     return ngx_http_post_request(sr, NULL);
 }
 
