@@ -131,8 +131,8 @@ ngx_http_concat_handler(ngx_http_request_t *r)
     off_t                       length;
     size_t                      root, last_len;
     time_t                      last_modified;
-    u_char                     *p, *v, *e, *last, *last_type, *c;
-	unsigned int               *filesz, size;
+    u_char                     *p, *v, *e, *last, *last_type, *c, *buffer;
+	unsigned int                buflen, namelen, size;
     ngx_int_t                   rc;
     ngx_str_t                  *uri, *filename, path;
     ngx_buf_t                  *b;
@@ -172,7 +172,7 @@ ngx_http_concat_handler(ngx_http_request_t *r)
         return rc;
     }
 
-	// 映射目录路径
+	// 获取root path
     last = ngx_http_map_uri_to_path(r, &path, &root, 0);
     if (last == NULL) {
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
@@ -244,10 +244,11 @@ ngx_http_concat_handler(ngx_http_request_t *r)
     last_type = NULL;
     length = 0;
     uri = uris.elts;
-	// 遍历所有文件
+	// 遍历所有文件, 创建chain、buffer
     for (i = 0; i < uris.nelts; i++) {
         filename = uri + i;
 
+		// 扩展名
         for (j = filename->len - 1; j > 1; j--) {
             if (filename->data[j] == '.' && filename->data[j - 1] != '/') {
 
@@ -362,25 +363,41 @@ ngx_http_concat_handler(ngx_http_request_t *r)
             }
         }
 
+		// 这里在每个文件名前面添加四字节的文件名长度
 		// 这里在每个文件内容前面添加四字节的文件长度
-		// 为了兼容不同系统，做个小端存储吧
+		// 为了兼容不同系统，按小端存储吧
 		if(clcf->with_file_size) {
+			// 先添加文件名长度+文件名：path，filename
+			namelen = filename->len - path.len;
+			buflen = namelen + 2*sizeof(unsigned int);
+			buffer = ngx_pnalloc(r->pool, buflen);
+		    if(buffer == NULL) {
+				return NGX_HTTP_INTERNAL_SERVER_ERROR;
+			}	
+			// 文件名长度:4字节
+			c = buffer;
+			for(j=0; j<sizeof(unsigned int); j++) {
+				*c++ = namelen & 0x000000ff;
+				namelen >>= 8;
+			}
+			// 文件名
+			c = ngx_cpymem(c, filename->data+path.len, filename->len-path.len);
+
+			// 文件大小:4字节
+			size = (unsigned int)of.size;
+			for(j=0; j<sizeof(unsigned int); j++) {
+				*c++ = size & 0x000000ff;
+				size >>= 8;
+			}
+
 			b = ngx_pcalloc(r->pool, sizeof(ngx_buf_t));
 			if (b == NULL) {
 				return NGX_HTTP_INTERNAL_SERVER_ERROR;
 			}
-
-			filesz = ngx_pcalloc(r->pool, sizeof(unsigned int));
-			c = (u_char *)filesz;
-			size = (unsigned int)of.size;
-			for(j=1; j<sizeof(unsigned int); j++) {
-				*c++ = size & 0x000000ff;
-				size >>= 8;
-			}
-			b->pos = (u_char *)filesz;
-			b->last = (u_char *)filesz+sizeof(unsigned int);
+			b->pos = buffer;
+			b->last = buffer + buflen;
 			b->memory = 1;
-			length += sizeof(unsigned int);
+			length += buflen;
 
 			if(last_out == NULL) {
 				out.buf = b;
@@ -401,7 +418,7 @@ ngx_http_concat_handler(ngx_http_request_t *r)
 		}
   		// end here
 
-
+		// 文件内容
         b = ngx_pcalloc(r->pool, sizeof(ngx_buf_t));
         if (b == NULL) {
             return NGX_HTTP_INTERNAL_SERVER_ERROR;
