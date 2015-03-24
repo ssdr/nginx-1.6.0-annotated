@@ -332,6 +332,10 @@ ngx_http_ssi_header_filter(ngx_http_request_t *r)
     ngx_http_ssi_ctx_t       *ctx;
     ngx_http_ssi_loc_conf_t  *slcf;
 
+	//
+    ngx_log_debug2(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+                   "http ssi header filter \"%V?%V\"", &r->uri, &r->args);
+
     slcf = ngx_http_get_module_loc_conf(r, ngx_http_ssi_filter_module);
 
     if (!slcf->enable
@@ -341,6 +345,7 @@ ngx_http_ssi_header_filter(ngx_http_request_t *r)
         return ngx_http_next_header_filter(r);
     }
 
+	// 设置ssi上下文结构
     ctx = ngx_pcalloc(r->pool, sizeof(ngx_http_ssi_ctx_t));
     if (ctx == NULL) {
         return NGX_ERROR;
@@ -416,7 +421,9 @@ ngx_http_ssi_body_filter(ngx_http_request_t *r, ngx_chain_t *in)
     }
 
     ngx_log_debug2(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-                   "http ssi filter \"%V?%V\"", &r->uri, &r->args);
+                   "http ssi body filter \"%V?%V\"", &r->uri, &r->args);
+	// here we can see what in-chain is...
+	ngx_write_fd(ngx_stderr, in->buf->pos, in->buf->last-in->buf->pos);
 
     if (ctx->wait) {
 
@@ -447,7 +454,7 @@ ngx_http_ssi_body_filter(ngx_http_request_t *r, ngx_chain_t *in)
     slcf = ngx_http_get_module_loc_conf(r, ngx_http_ssi_filter_module);
 
     ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-                   "http ssi filter 开始解析------------------------");
+                   "http ssi body filter 开始解析------------------------");
 	// 遍历chain
     while (ctx->in || ctx->buf) {
 
@@ -465,14 +472,14 @@ ngx_http_ssi_body_filter(ngx_http_request_t *r, ngx_chain_t *in)
         b = NULL;
 
     	ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-                   "http ssi filter buffer解析**********************");
+                   "http ssi body filter buffer解析***********");
 		// 遍历buffer
         while (ctx->pos < ctx->buf->last) {
 
             ngx_log_debug2(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
                            "saved: %d state: %d", ctx->saved, ctx->state);
 
-			// 解析ssi
+			// ***解析ssi
             rc = ngx_http_ssi_parse(r, ctx);
 
             ngx_log_debug4(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
@@ -484,9 +491,10 @@ ngx_http_ssi_body_filter(ngx_http_request_t *r, ngx_chain_t *in)
                 return rc;
             }
 
+			// 
             if (ctx->copy_start != ctx->copy_end) { // copy有效
 
-                if (ctx->output) { // output不为空
+                if (ctx->output) { // 输出 
 
                     ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
                                    "saved: %d", ctx->saved);
@@ -544,6 +552,7 @@ ngx_http_ssi_body_filter(ngx_http_request_t *r, ngx_chain_t *in)
 
                     ngx_memcpy(b, ctx->buf, sizeof(ngx_buf_t));
 
+					// 将已经解析到的没有命令指令的部分放到输出chain
                     b->pos = ctx->copy_start;
                     b->last = ctx->copy_end;
                     b->shadow = NULL;
@@ -566,7 +575,7 @@ ngx_http_ssi_body_filter(ngx_http_request_t *r, ngx_chain_t *in)
                     *ctx->last_out = cl;
                     ctx->last_out = &cl->next;
 
-                } else { // output为空
+                } else { // 暂不输出
                     if (ctx->block
                         && ctx->saved + (ctx->copy_end - ctx->copy_start))
                     {
@@ -595,6 +604,7 @@ ngx_http_ssi_body_filter(ngx_http_request_t *r, ngx_chain_t *in)
 
                         b = NULL;
 
+						// 暂不输出，挂到block链上
                         mctx = ngx_http_get_module_ctx(r->main,
                                                    ngx_http_ssi_filter_module);
                         bl = mctx->blocks->elts;
@@ -621,7 +631,7 @@ ngx_http_ssi_body_filter(ngx_http_request_t *r, ngx_chain_t *in)
                 ctx->copy_end = NULL;
             }
 
-			// 解析中断
+			// 一个buffer没放下。。。
             if (rc == NGX_AGAIN) {
                 continue;
             }
@@ -629,7 +639,7 @@ ngx_http_ssi_body_filter(ngx_http_request_t *r, ngx_chain_t *in)
 
             b = NULL;
 
-			// 解析成功
+			// 成功解析出命令指令
             if (rc == NGX_OK) {
 
                 smcf = ngx_http_get_module_main_conf(r,
@@ -649,6 +659,7 @@ ngx_http_ssi_body_filter(ngx_http_request_t *r, ngx_chain_t *in)
                     continue;
                 }
 
+				// 不输出，且为非阻塞命令
                 if (!ctx->output && !cmd->block) {
 
                     if (ctx->block) {
@@ -702,6 +713,7 @@ ngx_http_ssi_body_filter(ngx_http_request_t *r, ngx_chain_t *in)
                         *b->last++ = '-';
                         *b->last++ = '>';
 
+						// 插入block链
                         mctx = ngx_http_get_module_ctx(r->main,
                                                    ngx_http_ssi_filter_module);
                         bl = mctx->blocks->elts;
