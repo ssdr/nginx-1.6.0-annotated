@@ -491,8 +491,8 @@ ngx_http_ssi_body_filter(ngx_http_request_t *r, ngx_chain_t *in)
                 return rc;
             }
 
-			// 
-            if (ctx->copy_start != ctx->copy_end) { // copy有效
+			// 解析到的非指令部分
+            if (ctx->copy_start != ctx->copy_end) { 
 
                 if (ctx->output) { // 输出 
 
@@ -1695,6 +1695,7 @@ ngx_http_ssi_evaluate_string(ngx_http_request_t *r, ngx_http_ssi_ctx_t *ctx,
     ngx_array_t                 lengths, values;
     ngx_http_variable_value_t  *vv;
 
+	// text中变量数目
     n = ngx_http_script_variables_count(text);
 
     if (n == 0) {
@@ -1702,8 +1703,10 @@ ngx_http_ssi_evaluate_string(ngx_http_request_t *r, ngx_http_ssi_ctx_t *ctx,
         data = text->data;
         p = data;
 
+		// 添加前缀
         if ((flags & NGX_HTTP_SSI_ADD_PREFIX) && text->data[0] != '/') {
 
+			// 最后一个'/'
             for (prefix = r->uri.len; prefix; prefix--) {
                 if (r->uri.data[prefix - 1] == '/') {
                     break;
@@ -2067,19 +2070,22 @@ ngx_http_ssi_include(ngx_http_request_t *r, ngx_http_ssi_ctx_t *ctx,
     stub = params[NGX_HTTP_SSI_INCLUDE_STUB];
 
 	// uri和file有且只能有一个有效
+	// virtual/file的区别
+	// virtual指定的文件是相对于网站根路径的
+	// file指定的文件是相对于当前文件的
     if (uri && file) {
         ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
                       "inlcusion may be either virtual=\"%V\" or file=\"%V\"",
                       uri, file);
         return NGX_HTTP_SSI_ERROR;
     }
-
     if (uri == NULL && file == NULL) {
         ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
                       "no parameter in \"include\" SSI command");
         return NGX_HTTP_SSI_ERROR;
     }
 
+	// set和stub不能共用
     if (set && stub) {
         ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
                       "\"set\" and \"stub\" cannot be used together "
@@ -2114,6 +2120,7 @@ ngx_http_ssi_include(ngx_http_request_t *r, ngx_http_ssi_ctx_t *ctx,
         wait = (ngx_str_t *) -1;
     }
 
+	//
     rc = ngx_http_ssi_evaluate_string(r, ctx, uri, NGX_HTTP_SSI_ADD_PREFIX);
 
     if (rc != NGX_OK) {
@@ -2153,14 +2160,12 @@ ngx_http_ssi_include(ngx_http_request_t *r, ngx_http_ssi_ctx_t *ctx,
 
     found:
 
-		// 创建并发送子请求
-
         psr = ngx_palloc(r->pool, sizeof(ngx_http_post_subrequest_t));
         if (psr == NULL) {
             return NGX_ERROR;
         }
 
-		//
+		// stub
         psr->handler = ngx_http_ssi_stub_output;
 
         if (bl[i].count++) {
@@ -2218,7 +2223,7 @@ ngx_http_ssi_include(ngx_http_request_t *r, ngx_http_ssi_ctx_t *ctx,
             return NGX_ERROR;
         }
 
-		//
+		// set
         psr->handler = ngx_http_ssi_set_variable;
         psr->data = ngx_http_ssi_get_variable(r, set, key);
 
@@ -2246,7 +2251,10 @@ ngx_http_ssi_include(ngx_http_request_t *r, ngx_http_ssi_ctx_t *ctx,
         flags |= NGX_HTTP_SUBREQUEST_IN_MEMORY|NGX_HTTP_SUBREQUEST_WAITED;
     }
 
-	// 发送子请求
+    ngx_log_debug2(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+                   "********** http ssi subrequest \"%V?%V\"", uri, &args);
+
+	// 创建子请求
     if (ngx_http_subrequest(r, uri, &args, &sr, psr, flags) != NGX_OK) {
         return NGX_HTTP_SSI_ERROR;
     }
@@ -2854,6 +2862,7 @@ ngx_http_ssi_preconfiguration(ngx_conf_t *cf)
     ngx_http_ssi_command_t    *cmd;
     ngx_http_ssi_main_conf_t  *smcf;
 
+	// ssi variables
     for (v = ngx_http_ssi_vars; v->name.len; v++) {
         var = ngx_http_add_variable(cf, &v->name, v->flags);
         if (var == NULL) {
@@ -2866,6 +2875,7 @@ ngx_http_ssi_preconfiguration(ngx_conf_t *cf)
 
     smcf = ngx_http_conf_get_module_main_conf(cf, ngx_http_ssi_filter_module);
 
+	// ssi commands
     for (cmd = ngx_http_ssi_commands; cmd->name.len; cmd++) {
         rc = ngx_hash_add_key(&smcf->commands, &cmd->name, cmd,
                               NGX_HASH_READONLY_KEY);
