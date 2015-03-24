@@ -422,8 +422,8 @@ ngx_http_ssi_body_filter(ngx_http_request_t *r, ngx_chain_t *in)
 
     ngx_log_debug2(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
                    "http ssi body filter \"%V?%V\"", &r->uri, &r->args);
-	// here we can see what in-chain is...
-	ngx_write_fd(ngx_stderr, in->buf->pos, in->buf->last-in->buf->pos);
+	// here we can see what in-chain is, but coredump...
+	//ngx_write_fd(ngx_stderr, in->buf->pos, in->buf->last-in->buf->pos);
 
     if (ctx->wait) {
 

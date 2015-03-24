@@ -8,6 +8,7 @@
 #include <ngx_core.h>
 #include <ngx_http.h>
 
+static ngx_str_t ngx_http_file_not_found = ngx_string("FILE NOT FOUND:(");
 
 typedef struct {
     ngx_flag_t   enable;
@@ -145,9 +146,9 @@ ngx_http_concat_handler(ngx_http_request_t *r)
     ngx_http_concat_loc_conf_t *clcf;
 
 	// 禁止请求根目录
-    if (r->uri.data[r->uri.len - 1] != '/') {
-        return NGX_DECLINED;
-    }
+    //if (r->uri.data[r->uri.len - 1] != '/') {
+    //    return NGX_DECLINED;
+    //}
 
 	// 仅支持GET、HEAD请求
     if (!(r->method & (NGX_HTTP_GET|NGX_HTTP_HEAD))) {
@@ -336,7 +337,8 @@ ngx_http_concat_handler(ngx_http_request_t *r)
                 continue;
             }
 
-            return rc;
+			// 不返回错误，返回错误文本吧
+            //return rc;
         }
 
         if (!of.is_file) {
@@ -346,22 +348,27 @@ ngx_http_concat_handler(ngx_http_request_t *r)
                 continue;
             }
 
-            return NGX_HTTP_NOT_FOUND;
+            //return NGX_HTTP_NOT_FOUND;
         }
 
-        if (of.size == 0) {
-            continue;
-        }
+		// 如果文件不存在，返回固定字符串
+		if(rc == NGX_HTTP_NOT_FOUND) {
+			length += ngx_http_file_not_found.len;
+		} else {
+			if (of.size == 0) {
+				continue;
+			}
 
-        length += of.size;
-        if (last_out == NULL) {
-            last_modified = of.mtime;
+			length += of.size;
+			if (last_out == NULL) {
+				last_modified = of.mtime;
 
-        } else {
-            if (of.mtime > last_modified) {
-                last_modified = of.mtime;
-            }
-        }
+			} else {
+				if (of.mtime > last_modified) {
+					last_modified = of.mtime;
+				}
+			}
+		}
 
 		// 这里在每个文件名前面添加四字节的文件名长度
 		// 这里在每个文件内容前面添加四字节的文件长度
@@ -384,7 +391,11 @@ ngx_http_concat_handler(ngx_http_request_t *r)
 			c = ngx_cpymem(c, filename->data+path.len, filename->len-path.len);
 
 			// 文件大小:4字节
-			size = (unsigned int)of.size;
+			if(rc == NGX_HTTP_NOT_FOUND) {
+				size = ngx_http_file_not_found.len;
+			} else {
+				size = (unsigned int)of.size;
+			}
 			for(j=0; j<sizeof(unsigned int); j++) {
 				*c++ = size & 0x000000ff;
 				size >>= 8;
@@ -418,27 +429,34 @@ ngx_http_concat_handler(ngx_http_request_t *r)
 		}
   		// end here
 
-		// 文件内容
         b = ngx_pcalloc(r->pool, sizeof(ngx_buf_t));
         if (b == NULL) {
             return NGX_HTTP_INTERNAL_SERVER_ERROR;
         }
 
-        b->file = ngx_pcalloc(r->pool, sizeof(ngx_file_t));
-        if (b->file == NULL) {
-            return NGX_HTTP_INTERNAL_SERVER_ERROR;
-        }
+		// 如果文件不存在，返回固定字符串
+		if(rc == NGX_HTTP_NOT_FOUND) {
+			b->pos = ngx_http_file_not_found.data;
+			b->last = b->pos + ngx_http_file_not_found.len;
+			b->memory = 1;
+		} else {
+			// 文件内容
+			b->file = ngx_pcalloc(r->pool, sizeof(ngx_file_t));
+			if (b->file == NULL) {
+				return NGX_HTTP_INTERNAL_SERVER_ERROR;
+			}
 
-        b->file_pos = 0;
-        b->file_last = of.size;
+			b->file_pos = 0;
+			b->file_last = of.size;
 
-        b->in_file = b->file_last ? 1 : 0;
+			b->in_file = b->file_last ? 1 : 0;
 
-        b->file->fd = of.fd;
-        b->file->name = *filename;
-        b->file->log = r->connection->log;
+			b->file->fd = of.fd;
+			b->file->name = *filename;
+			b->file->log = r->connection->log;
 
-        b->file->directio = of.is_directio;
+			b->file->directio = of.is_directio;
+		}
 
         if (last_out == NULL) {
             out.buf = b;
