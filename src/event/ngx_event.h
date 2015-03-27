@@ -35,8 +35,9 @@ typedef struct {
 } ngx_event_mutex_t;
 
 
+// nginx事件
 struct ngx_event_s {
-    void            *data;
+    void            *data; // 事件对应的连接
 
     unsigned         write:1;
 
@@ -110,7 +111,7 @@ struct ngx_event_s {
     unsigned         available:1;
 #endif
 
-    ngx_event_handler_pt  handler;
+    ngx_event_handler_pt  handler; // 事件处理函数
 
 
 #if (NGX_HAVE_AIO)
@@ -217,6 +218,7 @@ struct ngx_event_aio_s {
 #endif
 
 
+// 事件操作
 typedef struct {
     ngx_int_t  (*add)(ngx_event_t *ev, ngx_int_t event, ngx_uint_t flags);
     ngx_int_t  (*del)(ngx_event_t *ev, ngx_int_t event, ngx_uint_t flags);
@@ -240,24 +242,28 @@ extern ngx_event_actions_t   ngx_event_actions;
 
 
 /*
+ * 水平触发
  * The event filter requires to read/write the whole data:
  * select, poll, /dev/poll, kqueue, epoll.
  */
 #define NGX_USE_LEVEL_EVENT      0x00000001
 
 /*
+ * 仅触发一次，之后删除
  * The event filter is deleted after a notification without an additional
  * syscall: kqueue, epoll.
  */
 #define NGX_USE_ONESHOT_EVENT    0x00000002
 
 /*
+ * 边缘触发
  * The event filter notifies only the changes and an initial level:
  * kqueue, epoll.
  */
 #define NGX_USE_CLEAR_EVENT      0x00000004
 
 /*
+ * kqueue only
  * The event filter has kqueue features: the eof flag, errno,
  * available data, etc.
  */
@@ -275,6 +281,7 @@ extern ngx_event_actions_t   ngx_event_actions;
 #define NGX_USE_GREEDY_EVENT     0x00000020
 
 /*
+ * EPOLL
  * The event filter is epoll.
  */
 #define NGX_USE_EPOLL_EVENT      0x00000040
@@ -440,6 +447,7 @@ extern ngx_event_actions_t   ngx_event_actions;
 #endif
 
 
+// 事件操作宏
 #define ngx_process_changes  ngx_event_actions.process_changes
 #define ngx_process_events   ngx_event_actions.process_events
 #define ngx_done_events      ngx_event_actions.done
@@ -483,6 +491,7 @@ typedef struct {
 } ngx_event_conf_t;
 
 
+// 事件模块
 typedef struct {
     ngx_str_t              *name;
 

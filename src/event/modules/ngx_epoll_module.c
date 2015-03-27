@@ -34,19 +34,22 @@
 #define EPOLL_CTL_DEL  2
 #define EPOLL_CTL_MOD  3
 
+// epoll数据
 typedef union epoll_data {
-    void         *ptr;
+    void         *ptr; // 对应的connection
     int           fd;
     uint32_t      u32;
     uint64_t      u64;
 } epoll_data_t;
 
+// epoll事件
 struct epoll_event {
     uint32_t      events;
     epoll_data_t  data;
 };
 
 
+// 返回epoll文件描述符，size为关心的最大连接数
 int epoll_create(int size);
 
 int epoll_create(int size)
@@ -55,6 +58,7 @@ int epoll_create(int size)
 }
 
 
+// epoll文件描述符上的操作：注册、修改、删除
 int epoll_ctl(int epfd, int op, int fd, struct epoll_event *event);
 
 int epoll_ctl(int epfd, int op, int fd, struct epoll_event *event)
@@ -63,6 +67,14 @@ int epoll_ctl(int epfd, int op, int fd, struct epoll_event *event)
 }
 
 
+/*
+ * 等待事件发生
+ * epfd				epoll_create()返回的fd
+ * events			用于回传代理事件的数组
+ * nevents			每次能处理的事件数
+ * timeout			等待的超时时间
+ * 返回发生事件数
+ */
 int epoll_wait(int epfd, struct epoll_event *events, int nevents, int timeout);
 
 int epoll_wait(int epfd, struct epoll_event *events, int nevents, int timeout)
@@ -264,6 +276,7 @@ ngx_epoll_aio_init(ngx_cycle_t *cycle, ngx_epoll_conf_t *epcf)
     ee.events = EPOLLIN|EPOLLET;
     ee.data.ptr = &ngx_eventfd_conn;
 
+	// epoll ctl
     if (epoll_ctl(ep, EPOLL_CTL_ADD, ngx_eventfd, &ee) != -1) {
         return;
     }
@@ -298,6 +311,7 @@ ngx_epoll_init(ngx_cycle_t *cycle, ngx_msec_t timer)
 
     epcf = ngx_event_get_conf(cycle->conf_ctx, ngx_epoll_module);
 
+	// epoll_create
     if (ep == -1) {
         ep = epoll_create(cycle->connection_n / 2);
 
@@ -319,6 +333,7 @@ ngx_epoll_init(ngx_cycle_t *cycle, ngx_msec_t timer)
             ngx_free(event_list);
         }
 
+		// 分配512个事件空间
         event_list = ngx_alloc(sizeof(struct epoll_event) * epcf->events,
                                cycle->log);
         if (event_list == NULL) {
@@ -509,6 +524,7 @@ ngx_epoll_add_connection(ngx_connection_t *c)
     ngx_log_debug2(NGX_LOG_DEBUG_EVENT, c->log, 0,
                    "epoll add connection: fd:%d ev:%08XD", c->fd, ee.events);
 
+	// epoll_ctl
     if (epoll_ctl(ep, EPOLL_CTL_ADD, c->fd, &ee) == -1) {
         ngx_log_error(NGX_LOG_ALERT, c->log, ngx_errno,
                       "epoll_ctl(EPOLL_CTL_ADD, %d) failed", c->fd);
@@ -547,6 +563,7 @@ ngx_epoll_del_connection(ngx_connection_t *c, ngx_uint_t flags)
     ee.events = 0;
     ee.data.ptr = NULL;
 
+	// epoll_ctl
     if (epoll_ctl(ep, op, c->fd, &ee) == -1) {
         ngx_log_error(NGX_LOG_ALERT, c->log, ngx_errno,
                       "epoll_ctl(%d, %d) failed", op, c->fd);
@@ -576,8 +593,11 @@ ngx_epoll_process_events(ngx_cycle_t *cycle, ngx_msec_t timer, ngx_uint_t flags)
     ngx_log_debug1(NGX_LOG_DEBUG_EVENT, cycle->log, 0,
                    "epoll timer: %M", timer);
 
+	// epoll_wait
+	// 将得到的事件存到event_list中，最大nevents，实际返回events
     events = epoll_wait(ep, event_list, (int) nevents, timer);
 
+	// 错误
     err = (events == -1) ? ngx_errno : 0;
 
     if (flags & NGX_UPDATE_TIME || ngx_event_timer_alarm) {
@@ -602,6 +622,7 @@ ngx_epoll_process_events(ngx_cycle_t *cycle, ngx_msec_t timer, ngx_uint_t flags)
         return NGX_ERROR;
     }
 
+	// 没有事件
     if (events == 0) {
         if (timer != NGX_TIMER_INFINITE) {
             return NGX_OK;
@@ -614,6 +635,7 @@ ngx_epoll_process_events(ngx_cycle_t *cycle, ngx_msec_t timer, ngx_uint_t flags)
 
     ngx_mutex_lock(ngx_posted_events_mutex);
 
+	// 遍历所有产生的事件
     for (i = 0; i < events; i++) {
         c = event_list[i].data.ptr;
 
@@ -640,6 +662,7 @@ ngx_epoll_process_events(ngx_cycle_t *cycle, ngx_msec_t timer, ngx_uint_t flags)
                        "epoll: fd:%d ev:%04XD d:%p",
                        c->fd, revents, event_list[i].data.ptr);
 
+		// 错误事件
         if (revents & (EPOLLERR|EPOLLHUP)) {
             ngx_log_debug2(NGX_LOG_DEBUG_EVENT, cycle->log, 0,
                            "epoll_wait() error on fd:%d ev:%04XD",
@@ -666,6 +689,7 @@ ngx_epoll_process_events(ngx_cycle_t *cycle, ngx_msec_t timer, ngx_uint_t flags)
             revents |= EPOLLIN|EPOLLOUT;
         }
 
+		// 可读事件
         if ((revents & EPOLLIN) && rev->active) {
 
 #if (NGX_HAVE_EPOLLRDHUP)
@@ -694,6 +718,7 @@ ngx_epoll_process_events(ngx_cycle_t *cycle, ngx_msec_t timer, ngx_uint_t flags)
 
         wev = c->write;
 
+		// 可写事件
         if ((revents & EPOLLOUT) && wev->active) {
 
             if (c->fd == -1 || wev->instance != instance) {

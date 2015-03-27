@@ -402,7 +402,7 @@ ngx_http_concat_handler(ngx_http_request_t *r)
 			fnstr.data = buffer+sizeof(unsigned int);
 			fnstr.len = buflen-2*sizeof(unsigned int); 
             ngx_log_error(NGX_LOG_INFO, r->connection->log, 0,
-                          "** Filename with path[%V], Filesize[%d]", &fnstr, size);
+                          "@@@ Filename[%V], Filesize[%d] @@@", &fnstr, size);
 
 			for(j=0; j<sizeof(unsigned int); j++) {
 				*c++ = size & 0x000000ff;
@@ -512,7 +512,7 @@ ngx_http_concat_handler(ngx_http_request_t *r)
 
 	// 组合后的总大小
 	ngx_log_error(NGX_LOG_INFO, r->connection->log, 0,
-				  "** Content length when going out of concat module[%d]", length);
+				  "@@@ Content length when going out of concat module[%d] @@@", length);
 
     r->headers_out.status = NGX_HTTP_OK;
     r->headers_out.content_length_n = length;
