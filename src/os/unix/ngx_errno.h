@@ -15,18 +15,18 @@
 
 typedef int               ngx_err_t;
 
-#define NGX_EPERM         EPERM
-#define NGX_ENOENT        ENOENT
+#define NGX_EPERM         EPERM			// operation not permitted
+#define NGX_ENOENT        ENOENT		// no such file or dir
 #define NGX_ENOPATH       ENOENT
-#define NGX_ESRCH         ESRCH
-#define NGX_EINTR         EINTR
-#define NGX_ECHILD        ECHILD
-#define NGX_ENOMEM        ENOMEM
-#define NGX_EACCES        EACCES
+#define NGX_ESRCH         ESRCH			// no such process
+#define NGX_EINTR         EINTR			// interrupted system call
+#define NGX_ECHILD        ECHILD		// no child processes
+#define NGX_ENOMEM        ENOMEM		// out of memory
+#define NGX_EACCES        EACCES		// permission denied
 #define NGX_EBUSY         EBUSY
 #define NGX_EEXIST        EEXIST
 #define NGX_EXDEV         EXDEV
-#define NGX_ENOTDIR       ENOTDIR
+#define NGX_ENOTDIR       ENOTDIR		// not a dir
 #define NGX_EISDIR        EISDIR
 #define NGX_EINVAL        EINVAL
 #define NGX_ENFILE        ENFILE
@@ -42,7 +42,7 @@ typedef int               ngx_err_t;
 #define NGX_ENOTCONN      ENOTCONN
 #define NGX_ETIMEDOUT     ETIMEDOUT
 #define NGX_ECONNREFUSED  ECONNREFUSED
-#define NGX_ENAMETOOLONG  ENAMETOOLONG
+#define NGX_ENAMETOOLONG  ENAMETOOLONG	// file name too long
 #define NGX_ENETDOWN      ENETDOWN
 #define NGX_ENETUNREACH   ENETUNREACH
 #define NGX_EHOSTDOWN     EHOSTDOWN

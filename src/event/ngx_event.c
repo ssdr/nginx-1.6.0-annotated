@@ -222,15 +222,27 @@ ngx_process_events_and_timers(ngx_cycle_t *cycle)
 #endif
     }
 
+	// ngx_use_accept_mutex变量代表是否使用accept互斥体。
+	// 默认是使用，accept_mutex off;指令关闭。 
+	// accept mutex的作用就是避免惊群，同时实现负载均衡。
     if (ngx_use_accept_mutex) {
+		// ngx_accept_disabled变量在ngx_event_accept函数中计算。 
+		// 如果ngx_accept_disabled大于了0，就表示该进程接受的连接过多，
+		// 因此就放弃一次争抢accept mutex的机会，同时将自己减1。
+		// 然后，继续处理已有连接上的事件。
+		// Nginx就借用 此变量实现了进程关于连接的基本负载均衡。
         if (ngx_accept_disabled > 0) {
             ngx_accept_disabled--;
 
         } else {
+			// 尝试锁accept mutex，只有成功获取锁的进程，才会将listen套接字放入epoll中。
+			// 因此，这就保证了只有一个进程拥有监听套接口，故所有进程阻塞在epoll_wait时，不会出现惊群现象。
             if (ngx_trylock_accept_mutex(cycle) == NGX_ERROR) {
                 return;
             }
 
+			// 获取锁的进程，将添加一个NGX_POST_EVENTS标志，此标志的作用是将所有产生的事件放入一个队列中，等释放锁后，再慢慢来处理事件。
+			// 因为，处理事件可能 会很耗时，如果不先释放锁再处理的话，该进程就长 时间霸占了锁，导致其他进程无法获取锁，这样accept的效率就低了。
             if (ngx_accept_mutex_held) {
                 flags |= NGX_POST_EVENTS;
 
@@ -246,6 +258,7 @@ ngx_process_events_and_timers(ngx_cycle_t *cycle)
 
     delta = ngx_current_msec;
 
+	// epoll_wait()等待事件了
     (void) ngx_process_events(cycle, timer, flags);
 
     delta = ngx_current_msec - delta;
@@ -257,6 +270,7 @@ ngx_process_events_and_timers(ngx_cycle_t *cycle)
         ngx_event_process_posted(cycle, &ngx_posted_accept_events);
     }
 
+	// 
     if (ngx_accept_mutex_held) {
         ngx_shmtx_unlock(&ngx_accept_mutex);
     }
@@ -967,6 +981,7 @@ ngx_events_block(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     cf->module_type = NGX_EVENT_MODULE;
     cf->cmd_type = NGX_EVENT_CONF;
 
+	// event配置解析
     rv = ngx_conf_parse(cf, NULL);
 
     *cf = pcf;

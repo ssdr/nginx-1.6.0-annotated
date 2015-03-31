@@ -134,10 +134,10 @@ ngx_http_concat_handler(ngx_http_request_t *r)
     time_t                      last_modified;
     u_char                     *p, *v, *e, *last, *last_type, *c, *buffer;
 	unsigned int                buflen, namelen, size;
-    ngx_int_t                   rc;
+    ngx_int_t                   openf, rc;
     ngx_str_t                  *uri, *filename, path;
     ngx_buf_t                  *b;
-    ngx_uint_t                  i, j, level;
+    ngx_uint_t                  i, j, level, filenum, oknum, errnum;
     ngx_flag_t                  timestamp;
     ngx_array_t                 uris;
     ngx_chain_t                 out, **last_out, *cl;
@@ -246,6 +246,9 @@ ngx_http_concat_handler(ngx_http_request_t *r)
     length = 0;
     uri = uris.elts;
 	// 遍历所有文件, 创建chain、buffer
+	filenum = uris.nelts;
+	oknum = 0;
+	errnum = 0;
     for (i = 0; i < uris.nelts; i++) {
         filename = uri + i;
 
@@ -297,9 +300,13 @@ ngx_http_concat_handler(ngx_http_request_t *r)
         of.errors = ccf->open_file_cache_errors;
         of.events = ccf->open_file_cache_events;
 
-        if (ngx_open_cached_file(ccf->open_file_cache, filename, &of, r->pool)
-            != NGX_OK)
-        {
+		// 打开文件
+		openf = ngx_open_cached_file(ccf->open_file_cache, filename, &of, r->pool);
+        if (openf != NGX_OK) {
+
+			// 打开文件失败
+			errnum++;
+
             switch (of.err) {
 
             case 0:
@@ -331,7 +338,8 @@ ngx_http_concat_handler(ngx_http_request_t *r)
                               "%s \"%V\" failed", of.failed, filename);
             }
 
-            if (clcf->ignore_file_error
+            if (!clcf->with_file_size
+				&& clcf->ignore_file_error
                 && (rc == NGX_HTTP_NOT_FOUND || rc == NGX_HTTP_FORBIDDEN))
             {
                 continue;
@@ -339,23 +347,27 @@ ngx_http_concat_handler(ngx_http_request_t *r)
 
 			// 不返回错误，返回错误文本吧
             //return rc;
-        }
+        } else {
+			// 打开文件成功
+			oknum++;
+		}
 
         if (!of.is_file) {
             ngx_log_error(NGX_LOG_CRIT, r->connection->log, ngx_errno,
                           "\"%V\" is not a regular file", filename);
-            if (clcf->ignore_file_error) {
+            if (!clcf->with_file_size && clcf->ignore_file_error) {
                 continue;
             }
 
             //return NGX_HTTP_NOT_FOUND;
         }
 
-		// 如果文件不存在，返回固定字符串
-		if(rc == NGX_HTTP_NOT_FOUND) {
+		// 打开失败，返回固定字符串
+		if(openf != NGX_OK) {
 			length += ngx_http_file_not_found.len;
 		} else {
 			if (of.size == 0) {
+				errnum++;
 				continue;
 			}
 
@@ -391,7 +403,7 @@ ngx_http_concat_handler(ngx_http_request_t *r)
 			c = ngx_cpymem(c, filename->data+path.len, filename->len-path.len);
 
 			// 文件大小:4字节
-			if(rc == NGX_HTTP_NOT_FOUND) {
+			if(openf != NGX_OK) {
 				size = ngx_http_file_not_found.len;
 			} else {
 				size = (unsigned int)of.size;
@@ -443,7 +455,7 @@ ngx_http_concat_handler(ngx_http_request_t *r)
         }
 
 		// 如果文件不存在，返回固定字符串
-		if(rc == NGX_HTTP_NOT_FOUND) {
+		if(openf != NGX_OK) {
 			b->pos = ngx_http_file_not_found.data;
 			b->last = b->pos + ngx_http_file_not_found.len;
 			b->memory = 1;
@@ -513,6 +525,9 @@ ngx_http_concat_handler(ngx_http_request_t *r)
 	// 组合后的总大小
 	ngx_log_error(NGX_LOG_INFO, r->connection->log, 0,
 				  "@@@ Content length when going out of concat module[%d] @@@", length);
+
+	ngx_log_error(NGX_LOG_NOTICE, r->connection->log, 0,
+				  "@@@@@ 请求文件数[%d], 成功[%d], 失败[%d] @@@@@", filenum, oknum, errnum);
 
     r->headers_out.status = NGX_HTTP_OK;
     r->headers_out.content_length_n = length;
