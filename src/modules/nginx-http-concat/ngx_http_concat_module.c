@@ -522,12 +522,8 @@ ngx_http_concat_handler(ngx_http_request_t *r)
         cl->next = NULL;
     } // end of for loop
 
-	// 组合后的总大小
-	ngx_log_error(NGX_LOG_INFO, r->connection->log, 0,
-				  "@@@ Content length when going out of concat module[%d] @@@", length);
-
 	ngx_log_error(NGX_LOG_NOTICE, r->connection->log, 0,
-				  "@@@@@ 请求文件数[%d], 成功[%d], 失败[%d] @@@@@", filenum, oknum, errnum);
+				  "@@@@@ 请求文件数[%d], 成功[%d], 失败[%d] 总长度[%d] @@@@@", filenum, oknum, errnum, length);
 
     r->headers_out.status = NGX_HTTP_OK;
     r->headers_out.content_length_n = length;
