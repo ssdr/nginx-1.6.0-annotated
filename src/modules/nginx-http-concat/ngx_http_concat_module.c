@@ -145,6 +145,13 @@ ngx_http_concat_handler(ngx_http_request_t *r)
     ngx_http_core_loc_conf_t   *ccf;
     ngx_http_concat_loc_conf_t *clcf;
 
+	// 计时开始
+	//ngx_time_t *tt = ngx_timeofday();
+	//ngx_msec_t start = (ngx_msec_t) tt->sec * 1000 + tt->msec;
+
+	struct timeval start;
+	gettimeofday(&start, NULL);
+
 	// 禁止请求根目录
     //if (r->uri.data[r->uri.len - 1] != '/') {
     //    return NGX_DECLINED;
@@ -522,8 +529,13 @@ ngx_http_concat_handler(ngx_http_request_t *r)
         cl->next = NULL;
     } // end of for loop
 
+	//ngx_msec_t end = (ngx_msec_t) tt->sec * 1000 + tt->msec;
+	struct timeval end;
+	gettimeofday(&end, NULL);
+
 	ngx_log_error(NGX_LOG_NOTICE, r->connection->log, 0,
-				  "@@@@@ 请求文件数[%d], 成功[%d], 失败[%d] 总长度[%d] @@@@@", filenum, oknum, errnum, length);
+				  "@@@@@ 请求文件数[%d], 成功[%d], 失败[%d] 总长度[%d] 处理耗时[%d] @@@@@", 
+				  filenum, oknum, errnum, length, end.tv_usec-start.tv_usec);
 
     r->headers_out.status = NGX_HTTP_OK;
     r->headers_out.content_length_n = length;
