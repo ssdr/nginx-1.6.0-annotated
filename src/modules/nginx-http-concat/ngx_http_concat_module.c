@@ -146,9 +146,6 @@ ngx_http_concat_handler(ngx_http_request_t *r)
     ngx_http_concat_loc_conf_t *clcf;
 
 	// 计时开始
-	//ngx_time_t *tt = ngx_timeofday();
-	//ngx_msec_t start = (ngx_msec_t) tt->sec * 1000 + tt->msec;
-
 	struct timeval start;
 	gettimeofday(&start, NULL);
 
@@ -529,7 +526,7 @@ ngx_http_concat_handler(ngx_http_request_t *r)
         cl->next = NULL;
     } // end of for loop
 
-	//ngx_msec_t end = (ngx_msec_t) tt->sec * 1000 + tt->msec;
+	// 计时结束
 	struct timeval end;
 	gettimeofday(&end, NULL);
 
