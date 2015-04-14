@@ -315,8 +315,9 @@ ngx_http_concat_handler(ngx_http_request_t *r)
 		openf = ngx_open_cached_file(ccf->open_file_cache, filename, &of, r->pool);
         if (openf != NGX_OK) {
 
-			// 打开文件失败
+  			// 打开文件失败，返回固定字符串
 			errnum++;
+			length += ngx_http_file_not_found.len;
 
             switch (of.err) {
 
@@ -324,7 +325,6 @@ ngx_http_concat_handler(ngx_http_request_t *r)
                 return NGX_HTTP_INTERNAL_SERVER_ERROR;
 
             case NGX_ENOENT:		// no such file or dir
-			case NGX_ENOPATH:
 
                 level = NGX_LOG_ERR;
                 rc = NGX_HTTP_NOT_FOUND;
@@ -346,10 +346,9 @@ ngx_http_concat_handler(ngx_http_request_t *r)
                 break;
             }
 
-            if (rc != NGX_HTTP_NOT_FOUND || ccf->log_not_found) {
-                ngx_log_error(level, r->connection->log, of.err,
-                              "%s \"%V\" failed", of.failed, filename);
-            }
+			// 打下日志
+			ngx_log_error(level, r->connection->log, ngx_errno,
+						  "%s \"%V\" failed [%d]", of.failed, filename, rc);
 
             if (!clcf->with_file_size
 				&& clcf->ignore_file_error
@@ -357,33 +356,10 @@ ngx_http_concat_handler(ngx_http_request_t *r)
             {
                 continue;
             }
-
-			// 不返回错误，返回错误文本吧
-            //return rc;
+			
         } else {
-			// 打开文件成功
+			// 打开文件成功, 更新最后修改时间
 			oknum++;
-		}
-
-        if (!of.is_file) {
-            ngx_log_error(NGX_LOG_CRIT, r->connection->log, ngx_errno,
-                          "\"%V\" is not a regular file", filename);
-            if (!clcf->with_file_size && clcf->ignore_file_error) {
-                continue;
-            }
-
-            //return NGX_HTTP_NOT_FOUND;
-        }
-
-		// 打开失败，返回固定字符串
-		if(openf != NGX_OK) {
-			length += ngx_http_file_not_found.len;
-		} else {
-			if (of.size == 0) {
-				errnum++;
-				continue;
-			}
-
 			length += of.size;
 			if (last_out == NULL) {
 				last_modified = of.mtime;
