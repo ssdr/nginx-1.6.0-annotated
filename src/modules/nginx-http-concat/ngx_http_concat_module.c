@@ -165,14 +165,15 @@ ngx_http_concat_handler(ngx_http_request_t *r)
         return NGX_DECLINED;
     }
 
-	// ??style1.css,style2.css,foo/style3.css
-    /* the length of args must be greater than or equal to 2 */
+    /* the length of args must be greater than or equal to 2 
+	 * args字符串长度至少为2，且第一个字符为?
+	 * 如 ??style1.css,style2.css,foo/style3.css
+	 */
     if (r->args.len < 2 || r->args.data[0] != '?') {
         return NGX_DECLINED;
     }
 
     rc = ngx_http_discard_request_body(r);
-
     if (rc != NGX_OK) {
         return rc;
     }
@@ -203,7 +204,7 @@ ngx_http_concat_handler(ngx_http_request_t *r)
     e = r->args.data + r->args.len;
     for (p = r->args.data + 1, v = p, timestamp = 0; p != e; p++) {
 
-        if (*p == ',') {
+        if (*p == ',') {	// 正常文件名
             if (p == v || timestamp == 1) {
                 v = p + 1;
                 timestamp = 0;
@@ -218,7 +219,7 @@ ngx_http_concat_handler(ngx_http_request_t *r)
 
             v = p + 1;
 
-        } else if (*p == '?') {
+        } else if (*p == '?') {		// 版本字符串
             if (timestamp == 1) {
                 v = p;
                 continue;
@@ -235,6 +236,7 @@ ngx_http_concat_handler(ngx_http_request_t *r)
         }
     }
 
+	// 最后一个文件
     if (p - v > 0 && timestamp == 0) {
         rc = ngx_http_concat_add_path(r, &uris, clcf->max_files, &path, p, v);
         if (rc != NGX_OK) {
@@ -274,8 +276,11 @@ ngx_http_concat_handler(ngx_http_request_t *r)
             return NGX_HTTP_INTERNAL_SERVER_ERROR;
         }
 
+		// 验证文件类型
         r->headers_out.content_type_lowcase = NULL;
         if (ngx_http_test_content_type(r, &clcf->types) == NULL) {
+			ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+						  "invalid content type");
             return NGX_HTTP_BAD_REQUEST;
         }
 
@@ -288,6 +293,8 @@ ngx_http_concat_handler(ngx_http_request_t *r)
                                       r->headers_out.content_type_lowcase,
                                       last_len) != 0)))
             {
+				ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+							  "only unique content type is allowed");
                 return NGX_HTTP_BAD_REQUEST;
             }
 
@@ -316,15 +323,17 @@ ngx_http_concat_handler(ngx_http_request_t *r)
             case 0:
                 return NGX_HTTP_INTERNAL_SERVER_ERROR;
 
-            case NGX_ENOENT:
-            case NGX_ENOTDIR:
-            case NGX_ENAMETOOLONG:
+            case NGX_ENOENT:		// no such file or dir
+			case NGX_ENOPATH:
 
                 level = NGX_LOG_ERR;
                 rc = NGX_HTTP_NOT_FOUND;
                 break;
 
-            case NGX_EACCES:
+            case NGX_EACCES:		// permission denied
+			case NGX_EPERM:			// operation not permitted
+            case NGX_ENOTDIR:		// not a dir
+            case NGX_ENAMETOOLONG:	// filename too long
 
                 level = NGX_LOG_ERR;
                 rc = NGX_HTTP_FORBIDDEN;
@@ -386,8 +395,8 @@ ngx_http_concat_handler(ngx_http_request_t *r)
 			}
 		}
 
-		// 这里在每个文件名前面添加四字节的文件名长度
-		// 这里在每个文件内容前面添加四字节的文件长度
+		// 在每个文件名前面添加四字节的文件名长度
+		// 在每个文件内容前面添加四字节的文件长度
 		// 为了兼容不同系统，按小端存储吧
 		if(clcf->with_file_size) {
 			// 先添加文件名长度+文件名：path，filename
@@ -587,6 +596,7 @@ ngx_http_concat_add_path(ngx_http_request_t *r, ngx_array_t *uris,
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
 
+	// 文件名添加根路径，末尾添加\0
     d = ngx_cpymem(uri->data, path->data, path->len);
     d = ngx_cpymem(d, v, p - v);
     *d = '\0';
@@ -597,7 +607,8 @@ ngx_http_concat_add_path(ngx_http_request_t *r, ngx_array_t *uris,
 
 	// 检查uri
     if (ngx_http_parse_unsafe_uri(r, uri, &args, &flags) != NGX_OK) {
-		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, "ccc--------");
+		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, 
+					  "ngx_http_parse_unsafe_uri() returns ERROR");
         return NGX_HTTP_BAD_REQUEST;
     }
 
