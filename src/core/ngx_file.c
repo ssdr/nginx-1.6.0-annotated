@@ -110,6 +110,7 @@ ngx_write_chain_to_temp_file(ngx_temp_file_t *tf, ngx_chain_t *chain)
 {
     ngx_int_t  rc;
 
+	// 创建临时文件
     if (tf->file.fd == NGX_INVALID_FILE) {
         rc = ngx_create_temp_file(&tf->file, tf->path, tf->pool,
                                   tf->persistent, tf->clean, tf->access);
@@ -124,6 +125,7 @@ ngx_write_chain_to_temp_file(ngx_temp_file_t *tf, ngx_chain_t *chain)
         }
     }
 
+	// chain写入临时文件
     return ngx_write_chain_to_file(&tf->file, chain, tf->offset, tf->pool);
 }
 

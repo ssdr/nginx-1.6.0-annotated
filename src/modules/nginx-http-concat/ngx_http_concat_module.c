@@ -8,8 +8,6 @@
 #include <ngx_core.h>
 #include <ngx_http.h>
 
-static ngx_str_t ngx_http_file_not_found = ngx_string("FILE NOT FOUND:(");
-
 typedef struct {
     ngx_flag_t   enable;
     ngx_uint_t   max_files;
@@ -31,6 +29,20 @@ static ngx_int_t ngx_http_concat_init(ngx_conf_t *cf);
 static void *ngx_http_concat_create_loc_conf(ngx_conf_t *cf);
 static char *ngx_http_concat_merge_loc_conf(ngx_conf_t *cf, void *parent,
     void *child);
+
+
+// add by liuyan
+static ngx_str_t ngx_http_file_not_found = ngx_string("FILE NOT FOUND:(");
+
+static ngx_int_t ngx_http_get_file_subrequest(ngx_http_request_t *r, 
+											  ngx_str_t *fullname, ngx_str_t *root);
+static ngx_int_t subrequest_post_handler(ngx_http_request_t *r, void *data, ngx_int_t rc);
+
+typedef struct {
+	ngx_file_t	*file;
+	ngx_str_t	 root;
+	ngx_str_t	 path;
+} ngx_http_file_wrapper_t;
 
 
 static ngx_str_t  ngx_http_concat_default_types[] = {
@@ -327,6 +339,17 @@ ngx_http_concat_handler(ngx_http_request_t *r)
             case NGX_ENOENT:		// no such file or dir
 
                 level = NGX_LOG_ERR;
+
+				// subrequet
+				ngx_log_error(level, r->connection->log, 0,
+							  "-----------------filename: \"%V\" path: %V", filename, &path);
+
+				rc = ngx_http_get_file_subrequest(r, filename, &path);
+				if(rc != NGX_OK) {
+					ngx_log_error(level, r->connection->log, ngx_errno,
+								  "\"%V\" subrequest failed", filename);
+				}
+
                 rc = NGX_HTTP_NOT_FOUND;
                 break;
 
@@ -540,6 +563,123 @@ ngx_http_concat_handler(ngx_http_request_t *r)
     return ngx_http_output_filter(r, &out);
 }
 
+// 从后往前找第一个字符c
+static ngx_inline u_char *
+ngx_strrchr(u_char *p, u_char *last, u_char c)
+{
+    while (p > last) {
+
+        if (*p == c) {
+            return p;
+        }
+
+        p--;
+    }
+
+    return NULL;
+}
+
+
+// 创建子请求获取远程文件
+static ngx_int_t
+ngx_http_get_file_subrequest(ngx_http_request_t *r, ngx_str_t *fullname, ngx_str_t *root)
+{
+	// fullname示例
+	// /data/wwwroot/ssi/a.shtml
+	// |____________| root(/data/wwwroot/)
+	//               |__| path(ssi/)
+	//                   |_____| name(a.shtml)
+
+	ngx_http_file_wrapper_t *file_r = ngx_pcalloc(r->pool, sizeof(ngx_http_file_wrapper_t));
+
+	// 根路径
+	file_r->root.data = fullname->data;
+	file_r->root.len = root->len;
+
+	// 目录
+	u_char *s = fullname->data + root->len;
+	if(*s != '/') s--;
+	file_r->path.data = s;
+	u_char *e = ngx_strrchr(fullname->data+fullname->len-1, s, '/');
+	if(e == NULL) {
+		e = s;
+	}
+	file_r->path.len = e - s + 1;
+
+	// 文件名
+	ngx_file_t *file = ngx_pcalloc(r->pool, sizeof(ngx_file_t));
+	file->name.data = e + 1;
+	file->name.len = fullname->data + fullname->len - file->name.data;
+	file->log = r->connection->log;
+
+	file_r->file = file;
+
+	// 子请求结束时的回调函数
+	ngx_http_post_subrequest_t *psr = ngx_palloc(r->pool, sizeof(ngx_http_post_subrequest_t));
+	if(psr == NULL) {
+		return NGX_HTTP_INTERNAL_SERVER_ERROR;
+	}
+	psr->handler = subrequest_post_handler;
+	psr->data = file_r;
+
+	ngx_str_t prefix = ngx_string("/ssi");
+	ngx_str_t uri;
+	uri.len = prefix.len + file_r->path.len + file_r->file->name.len;
+	uri.data = ngx_palloc(r->pool, uri.len);
+	ngx_snprintf(uri.data, uri.len, "%V%V%V", &prefix, &file_r->path, &file_r->file->name);
+
+	// 子请求
+	ngx_http_request_t *sr;
+
+	ngx_int_t rc = ngx_http_subrequest(r, &uri, NULL, &sr, psr, NGX_HTTP_SUBREQUEST_IN_MEMORY);
+	if(rc != NGX_OK) {
+		return NGX_ERROR;
+	}
+
+	return NGX_OK;
+}
+
+// 将数据保存至文件
+static ngx_int_t 
+subrequest_post_handler(ngx_http_request_t *r, void *data, ngx_int_t rc)
+{
+	ngx_http_request_t *pr = r->parent;
+	ngx_http_file_wrapper_t *file_r = (ngx_http_file_wrapper_t *)data;
+
+	ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+				  "-----------------filename: \"%V\" path: %V", &file_r->file->name, &file_r->path);
+
+	ngx_file_t *file = file_r->file;
+	u_char fullname[256];
+	ngx_memzero(fullname, 256);
+	ngx_snprintf(fullname, 256, "%V%V%V", &file_r->root, &file_r->path, &file->name);
+
+
+	pr->headers_out.status = r->headers_out.status;
+	if(r->headers_out.status == NGX_HTTP_OK) {
+
+		// buffer的大小。。。
+		ngx_buf_t *buf = &r->upstream->buffer;
+
+		// 落地
+		if( file->fd <= 0 ) {
+			file->fd = ngx_open_file(fullname, NGX_FILE_RDWR|NGX_FILE_CREATE_OR_OPEN|NGX_FILE_NONBLOCK, 
+									 NGX_FILE_OPEN, 0);
+			if( file->fd <= 0 ) {
+				ngx_log_error(NGX_LOG_ERR, r->connection->log, ngx_errno,
+							  "ngx_open_tempfile() failed");
+				return NGX_ERROR;
+			}
+		}
+
+		//ssize_t total = ngx_write_chain_to_file(file, chain, offset, r->pool);
+        ngx_write_file(file, buf->pos, (size_t) (buf->last - buf->pos), file->sys_offset);
+	}
+
+	// pr->write_event_handler = post_handler;
+	
+	return NGX_OK;
+}
 
 static ngx_int_t
 ngx_http_concat_add_path(ngx_http_request_t *r, ngx_array_t *uris,
