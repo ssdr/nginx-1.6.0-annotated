@@ -341,9 +341,6 @@ ngx_http_concat_handler(ngx_http_request_t *r)
                 level = NGX_LOG_ERR;
 
 				// subrequet
-				ngx_log_error(level, r->connection->log, 0,
-							  "-----------------filename: \"%V\" path: %V", filename, &path);
-
 				rc = ngx_http_get_file_subrequest(r, filename, &path);
 				if(rc != NGX_OK) {
 					ngx_log_error(level, r->connection->log, ngx_errno,
@@ -598,13 +595,14 @@ ngx_http_get_file_subrequest(ngx_http_request_t *r, ngx_str_t *fullname, ngx_str
 
 	// 目录
 	u_char *s = fullname->data + root->len;
-	if(*s != '/') s--;
-	file_r->path.data = s;
 	u_char *e = ngx_strrchr(fullname->data+fullname->len-1, s, '/');
+	file_r->path.data = s;
 	if(e == NULL) {
-		e = s;
+		e = s-1;
+		file_r->path.len = 0;
+	} else {
+		file_r->path.len = e - s + 1;
 	}
-	file_r->path.len = e - s + 1;
 
 	// 文件名
 	ngx_file_t *file = ngx_pcalloc(r->pool, sizeof(ngx_file_t));
@@ -622,7 +620,7 @@ ngx_http_get_file_subrequest(ngx_http_request_t *r, ngx_str_t *fullname, ngx_str
 	psr->handler = subrequest_post_handler;
 	psr->data = file_r;
 
-	ngx_str_t prefix = ngx_string("/ssi");
+	ngx_str_t prefix = ngx_string("/ssi/");
 	ngx_str_t uri;
 	uri.len = prefix.len + file_r->path.len + file_r->file->name.len;
 	uri.data = ngx_palloc(r->pool, uri.len);
@@ -646,14 +644,13 @@ subrequest_post_handler(ngx_http_request_t *r, void *data, ngx_int_t rc)
 	ngx_http_request_t *pr = r->parent;
 	ngx_http_file_wrapper_t *file_r = (ngx_http_file_wrapper_t *)data;
 
-	ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-				  "-----------------filename: \"%V\" path: %V", &file_r->file->name, &file_r->path);
-
 	ngx_file_t *file = file_r->file;
 	u_char fullname[256];
 	ngx_memzero(fullname, 256);
 	ngx_snprintf(fullname, 256, "%V%V%V", &file_r->root, &file_r->path, &file->name);
 
+	ngx_log_error(NGX_LOG_NOTICE, r->connection->log, 0,
+				  "fullname: \"%s\" path: %V", fullname, &file_r->path);
 
 	pr->headers_out.status = r->headers_out.status;
 	if(r->headers_out.status == NGX_HTTP_OK) {
@@ -663,17 +660,28 @@ subrequest_post_handler(ngx_http_request_t *r, void *data, ngx_int_t rc)
 
 		// 落地
 		if( file->fd <= 0 ) {
+			// 创建目录
+			if(file_r->path.len > 0) {
+				u_char fullpath[256];
+				ngx_memzero(fullpath, 256);
+				ngx_snprintf(fullpath, 256, "%V%V", &file_r->root, &file_r->path);
+				if(ngx_create_full_path(fullpath, 0700)) {
+					ngx_log_error(NGX_LOG_ERR, r->connection->log, ngx_errno, 
+							      "ngx_create_full_path() failed");
+					return NGX_ERROR;
+				}
+			}
+			// 创建文件
 			file->fd = ngx_open_file(fullname, NGX_FILE_RDWR|NGX_FILE_CREATE_OR_OPEN|NGX_FILE_NONBLOCK, 
 									 NGX_FILE_OPEN, 0);
 			if( file->fd <= 0 ) {
-				ngx_log_error(NGX_LOG_ERR, r->connection->log, ngx_errno,
-							  "ngx_open_tempfile() failed");
+				ngx_log_error(NGX_LOG_ERR, r->connection->log, ngx_errno, "ngx_open_tempfile() failed");
 				return NGX_ERROR;
 			}
 		}
 
 		//ssize_t total = ngx_write_chain_to_file(file, chain, offset, r->pool);
-        ngx_write_file(file, buf->pos, (size_t) (buf->last - buf->pos), file->sys_offset);
+        ngx_write_file(file, buf->pos, (size_t)(buf->last-buf->pos), file->sys_offset);
 	}
 
 	// pr->write_event_handler = post_handler;
