@@ -650,7 +650,9 @@ subrequest_post_handler(ngx_http_request_t *r, void *data, ngx_int_t rc)
 	ngx_snprintf(fullname, 256, "%V%V%V", &file_r->root, &file_r->path, &file->name);
 
 	ngx_log_error(NGX_LOG_NOTICE, r->connection->log, 0,
-				  "fullname: \"%s\" path: %V", fullname, &file_r->path);
+				  "---------- subrequest_post_handler() ----------"
+				  "fullname: \"%s\" path: %V", 
+				  fullname, &file_r->path);
 
 	pr->headers_out.status = r->headers_out.status;
 	if(r->headers_out.status == NGX_HTTP_OK) {
@@ -675,13 +677,15 @@ subrequest_post_handler(ngx_http_request_t *r, void *data, ngx_int_t rc)
 			file->fd = ngx_open_file(fullname, NGX_FILE_RDWR|NGX_FILE_CREATE_OR_OPEN|NGX_FILE_NONBLOCK, 
 									 NGX_FILE_OPEN, 0);
 			if( file->fd <= 0 ) {
-				ngx_log_error(NGX_LOG_ERR, r->connection->log, ngx_errno, "ngx_open_tempfile() failed");
+				ngx_log_error(NGX_LOG_ERR, r->connection->log, ngx_errno, "ngx_open_file() failed");
 				return NGX_ERROR;
 			}
 		}
 
-		//ssize_t total = ngx_write_chain_to_file(file, chain, offset, r->pool);
         ngx_write_file(file, buf->pos, (size_t)(buf->last-buf->pos), file->sys_offset);
+
+		ngx_close_file(file->fd);
+		file->fd = 0;
 	}
 
 	// pr->write_event_handler = post_handler;
