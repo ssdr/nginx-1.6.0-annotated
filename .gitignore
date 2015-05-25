@@ -1,4 +1,6 @@
 .tags
 objs/
 tags
+Makefile
+*.swp
 

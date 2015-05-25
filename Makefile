@@ -12,10 +12,10 @@ install:
 	$(MAKE) -f objs/Makefile install
 
 upgrade:
-	/data/liuyan/bin/nginx-1.6/sbin/nginx -t
+	/usr/local/nginx/sbin/nginx -t
 
-	kill -USR2 `cat /data/liuyan/bin/nginx-1.6/logs/nginx.pid`
+	kill -USR2 `cat /usr/local/nginx/logs/nginx.pid`
 	sleep 1
-	test -f /data/liuyan/bin/nginx-1.6/logs/nginx.pid.oldbin
+	test -f /usr/local/nginx/logs/nginx.pid.oldbin
 
-	kill -QUIT `cat /data/liuyan/bin/nginx-1.6/logs/nginx.pid.oldbin`
+	kill -QUIT `cat /usr/local/nginx/logs/nginx.pid.oldbin`

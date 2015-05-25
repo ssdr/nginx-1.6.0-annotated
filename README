@@ -1,14 +1,3 @@
 
 Documentation is available at http://nginx.org
 
-## liuyan md5
-./configure --prefix=/data/liuyan/bin/nginx-1.6/ --add-module=./src/modules/nginx_http_md5_mod/
-
-## liuyan concat
-./configure --prefix=/data/liuyan/bin/nginx-1.6/ --add-module=./src/modules/nginx_http_concat_mod/
-
-## taobao concat
-./configure --prefix=/data/liuyan/bin/nginx-1.6/ --add-module=./src/modules/nginx-http-concat/
-
-### patern
-http://172.30.204.122:7211/ssi/??header.shtml,footer.shtml
