@@ -278,14 +278,14 @@ typedef struct {
 typedef void (*ngx_http_client_body_handler_pt)(ngx_http_request_t *r);
 
 typedef struct {
-    ngx_temp_file_t                  *temp_file;
-    ngx_chain_t                      *bufs;
-    ngx_buf_t                        *buf;
-    off_t                             rest;
+    ngx_temp_file_t                  *temp_file;	// 存放于临时文件
+    ngx_chain_t                      *bufs;			// 一块buf存不了
+    ngx_buf_t                        *buf;			// 直接存储包体
+    off_t                             rest;			// 剩余待接收的包体长度
     ngx_chain_t                      *free;
     ngx_chain_t                      *busy;
     ngx_http_chunked_t               *chunked;
-    ngx_http_client_body_handler_pt   post_handler;
+    ngx_http_client_body_handler_pt   post_handler;	// 包体接收完毕后的回调
 } ngx_http_request_body_t;
 
 
@@ -320,8 +320,11 @@ typedef void (*ngx_http_cleanup_pt)(void *data);
 typedef struct ngx_http_cleanup_s  ngx_http_cleanup_t;
 
 struct ngx_http_cleanup_s {
+	// http模块提供的清理资源的回调
     ngx_http_cleanup_pt               handler;
+	// 回调参数
     void                             *data;
+	// 一个请求可能有多个清理方法
     ngx_http_cleanup_t               *next;
 };
 

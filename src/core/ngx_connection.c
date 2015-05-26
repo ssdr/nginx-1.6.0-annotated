@@ -922,14 +922,17 @@ ngx_close_connection(ngx_connection_t *c)
         return;
     }
 
+	// 从定时器中删除读事件
     if (c->read->timer_set) {
         ngx_del_timer(c->read);
     }
 
+	// 从定时器中删除写事件
     if (c->write->timer_set) {
         ngx_del_timer(c->write);
     }
 
+	// 从epoll中删除连接的读写事件
     if (ngx_del_conn) {
         ngx_del_conn(c, NGX_CLOSE_EVENT);
 
@@ -989,11 +992,13 @@ ngx_close_connection(ngx_connection_t *c)
 
     log_error = c->log_error;
 
+	// 归还连接
     ngx_free_connection(c);
 
     fd = c->fd;
     c->fd = (ngx_socket_t) -1;
 
+	// 关闭连接
     if (ngx_close_socket(fd) == -1) {
 
         err = ngx_socket_errno;

@@ -40,6 +40,7 @@ ngx_http_read_client_request_body(ngx_http_request_t *r,
     ngx_http_request_body_t   *rb;
     ngx_http_core_loc_conf_t  *clcf;
 
+	// 引用计数加1
     r->main->count++;
 
 #if (NGX_HTTP_SPDY)
@@ -59,6 +60,7 @@ ngx_http_read_client_request_body(ngx_http_request_t *r,
         goto done;
     }
 
+	// 分配request_body成员，接收包体
     rb = ngx_pcalloc(r->pool, sizeof(ngx_http_request_body_t));
     if (rb == NULL) {
         rc = NGX_HTTP_INTERNAL_SERVER_ERROR;
@@ -243,6 +245,7 @@ ngx_http_read_client_request_body_handler(ngx_http_request_t *r)
 }
 
 
+// 实际真正读取包体的函数
 static ngx_int_t
 ngx_http_do_read_client_request_body(ngx_http_request_t *r)
 {
@@ -264,6 +267,7 @@ ngx_http_do_read_client_request_body(ngx_http_request_t *r)
 
     for ( ;; ) {
         for ( ;; ) {
+			// 缓冲区已满
             if (rb->buf->last == rb->buf->end) {
 
                 /* pass buffer to request body filter chain */
@@ -295,6 +299,7 @@ ngx_http_do_read_client_request_body(ngx_http_request_t *r)
                     return NGX_HTTP_INTERNAL_SERVER_ERROR;
                 }
 
+				// 重置缓冲区
                 rb->buf->pos = rb->buf->start;
                 rb->buf->last = rb->buf->start;
             }
@@ -306,6 +311,7 @@ ngx_http_do_read_client_request_body(ngx_http_request_t *r)
                 size = (size_t) rest;
             }
 
+			// 读取包体
             n = c->recv(c, rb->buf->last, size);
 
             ngx_log_debug1(NGX_LOG_DEBUG_HTTP, c->log, 0,
@@ -315,6 +321,7 @@ ngx_http_do_read_client_request_body(ngx_http_request_t *r)
                 break;
             }
 
+			// 返回0，表示客户端主动关闭了连接
             if (n == 0) {
                 ngx_log_error(NGX_LOG_INFO, c->log, 0,
                               "client prematurely closed connection");
@@ -325,6 +332,7 @@ ngx_http_do_read_client_request_body(ngx_http_request_t *r)
                 return NGX_HTTP_BAD_REQUEST;
             }
 
+			// 修改缓冲区参数
             rb->buf->last += n;
             r->request_length += n;
 
@@ -341,6 +349,7 @@ ngx_http_do_read_client_request_body(ngx_http_request_t *r)
                 }
             }
 
+			// jump out
             if (rb->rest == 0) {
                 break;
             }
@@ -348,27 +357,34 @@ ngx_http_do_read_client_request_body(ngx_http_request_t *r)
             if (rb->buf->last < rb->buf->end) {
                 break;
             }
-        }
+        } // end of inner for loop
 
         ngx_log_debug1(NGX_LOG_DEBUG_HTTP, c->log, 0,
                        "http client request body rest %O", rb->rest);
 
+		// jump out
         if (rb->rest == 0) {
             break;
         }
 
+		// 添加读事件
         if (!c->read->ready) {
             clcf = ngx_http_get_module_loc_conf(r, ngx_http_core_module);
+			// 将读事件添加到定时器
             ngx_add_timer(c->read, clcf->client_body_timeout);
 
+			// 将读事件添加到epoll
             if (ngx_handle_read_event(c->read, 0) != NGX_OK) {
                 return NGX_HTTP_INTERNAL_SERVER_ERROR;
             }
 
             return NGX_AGAIN;
         }
-    }
+    } // end of outer for loop
 
+	// 到这里说明已经接收到完整的包体了
+	
+	// 将读事件从定时器中删除
     if (c->read->timer_set) {
         ngx_del_timer(c->read);
     }
@@ -403,8 +419,10 @@ ngx_http_do_read_client_request_body(ngx_http_request_t *r)
         }
     }
 
+	// 忽略连接上的读事件处理
     r->read_event_handler = ngx_http_block_reading;
 
+	// 执行回调
     rb->post_handler(r);
 
     return NGX_OK;
@@ -426,6 +444,7 @@ ngx_http_write_request_body(ngx_http_request_t *r)
                    "http write client request body, bufs %p", rb->bufs);
 
     if (rb->temp_file == NULL) {
+		// 临时文件
         tf = ngx_pcalloc(r->pool, sizeof(ngx_temp_file_t));
         if (tf == NULL) {
             return NGX_ERROR;
@@ -466,6 +485,7 @@ ngx_http_write_request_body(ngx_http_request_t *r)
         return NGX_OK;
     }
 
+	// 写入临时文件
     n = ngx_write_chain_to_temp_file(rb->temp_file, rb->bufs);
 
     /* TODO: n == 0 or not complete and level event */
@@ -502,6 +522,7 @@ ngx_http_discard_request_body(ngx_http_request_t *r)
     }
 #endif
 
+	// 子请求直接返回ok表示丢弃成功
     if (r != r->main || r->discard_body || r->request_body) {
         return NGX_OK;
     }

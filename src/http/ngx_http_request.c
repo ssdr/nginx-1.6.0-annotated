@@ -2254,6 +2254,7 @@ ngx_http_post_request(ngx_http_request_t *r, ngx_http_posted_request_t *pr)
 }
 
 
+// http模块最常用的结束请求方法
 void
 ngx_http_finalize_request(ngx_http_request_t *r, ngx_int_t rc)
 {
@@ -2267,6 +2268,7 @@ ngx_http_finalize_request(ngx_http_request_t *r, ngx_int_t rc)
                    "http finalize request: %d, \"%V?%V\" a:%d, c:%d",
                    rc, &r->uri, &r->args, r == c->data, r->main->count);
 
+	// do nothing 结束请求
     if (rc == NGX_DONE) {
         ngx_http_finalize_connection(r);
         return;
@@ -2276,6 +2278,7 @@ ngx_http_finalize_request(ngx_http_request_t *r, ngx_int_t rc)
         c->error = 1;
     }
 
+	// 继续http阶段处理
     if (rc == NGX_DECLINED) {
         r->content_handler = NULL;
         r->write_event_handler = ngx_http_core_run_phases;
@@ -2283,10 +2286,14 @@ ngx_http_finalize_request(ngx_http_request_t *r, ngx_int_t rc)
         return;
     }
 
+	// 子请求处理
     if (r != r->main && r->post_subrequest) {
         rc = r->post_subrequest->handler(r, r->post_subrequest->data, rc);
     }
 
+	// 其他rc值的处理
+	
+	// 出错，直接强制结束请求
     if (rc == NGX_ERROR
         || rc == NGX_HTTP_REQUEST_TIME_OUT
         || rc == NGX_HTTP_CLIENT_CLOSED_REQUEST
@@ -2326,10 +2333,12 @@ ngx_http_finalize_request(ngx_http_request_t *r, ngx_int_t rc)
         c->read->handler = ngx_http_request_handler;
         c->write->handler = ngx_http_request_handler;
 
+		// 递归调用？
         ngx_http_finalize_request(r, ngx_http_special_response_handler(r, rc));
         return;
     }
 
+	// 子请求
     if (r != r->main) {
 
         if (r->buffered || r->postponed) {
@@ -2439,6 +2448,7 @@ ngx_http_finalize_request(ngx_http_request_t *r, ngx_int_t rc)
         return;
     }
 
+	// 结束请求
     ngx_http_finalize_connection(r);
 }
 
@@ -2497,6 +2507,7 @@ ngx_http_terminate_handler(ngx_http_request_t *r)
     ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
                    "http terminate handler count:%d", r->count);
 
+	// 引用计数置1
     r->count = 1;
 
     ngx_http_close_request(r, 0);
@@ -3391,6 +3402,7 @@ ngx_http_close_request(ngx_http_request_t *r, ngx_int_t rc)
         ngx_log_error(NGX_LOG_ALERT, c->log, 0, "http request count is zero");
     }
 
+	// 引用计数减1
     r->count--;
 
     if (r->count || r->blocked) {
@@ -3431,6 +3443,7 @@ ngx_http_free_request(ngx_http_request_t *r, ngx_int_t rc)
     cln = r->cleanup;
     r->cleanup = NULL;
 
+	// 遍历清理方法
     while (cln) {
         if (cln->handler) {
             cln->handler(cln->data);
@@ -3457,6 +3470,7 @@ ngx_http_free_request(ngx_http_request_t *r, ngx_int_t rc)
 
     log->action = "logging request";
 
+	// access log
     ngx_http_log_request(r);
 
     log->action = "closing request";
@@ -3493,6 +3507,7 @@ ngx_http_free_request(ngx_http_request_t *r, ngx_int_t rc)
     pool = r->pool;
     r->pool = NULL;
 
+	// 销毁请求内存池
     ngx_destroy_pool(pool);
 }
 
