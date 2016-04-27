@@ -99,6 +99,7 @@ struct ngx_open_file_s {
 #define NGX_MODULE_V1          0, 0, 0, 0, 0, 0, 1
 #define NGX_MODULE_V1_PADDING  0, 0, 0, 0, 0, 0, 0, 0
 
+// 重要度***
 struct ngx_module_s {
     ngx_uint_t            ctx_index;
     ngx_uint_t            index; // 模块在集合中的索引
@@ -138,7 +139,9 @@ struct ngx_module_s {
 
 typedef struct {
     ngx_str_t             name;
+    // 配置解析前
     void               *(*create_conf)(ngx_cycle_t *cycle);
+    // 配置解析后
     char               *(*init_conf)(ngx_cycle_t *cycle, void *conf);
 } ngx_core_module_t;
 

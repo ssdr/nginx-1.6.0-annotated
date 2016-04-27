@@ -10,6 +10,7 @@
 
 
 #define NGX_HTTP_MAX_URI_CHANGES           10
+// 最大子请求数
 #define NGX_HTTP_MAX_SUBREQUESTS           200
 
 /* must be 2^n */
@@ -64,6 +65,7 @@
 #define NGX_HTTP_LOG_UNSAFE                8
 
 
+// HTTP状态码
 #define NGX_HTTP_CONTINUE                  100
 #define NGX_HTTP_SWITCHING_PROTOCOLS       101
 #define NGX_HTTP_PROCESSING                102
