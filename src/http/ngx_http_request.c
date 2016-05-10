@@ -905,6 +905,7 @@ ngx_http_ssl_servername(ngx_ssl_conn_t *ssl_conn, int *ad, void *arg)
 #endif
 
 
+// 处理请求行
 static void
 ngx_http_process_request_line(ngx_event_t *rev)
 {
@@ -921,7 +922,8 @@ ngx_http_process_request_line(ngx_event_t *rev)
                    "http process request line");
 
     if (rev->timedout) {
-        ngx_log_error(NGX_LOG_INFO, c->log, NGX_ETIMEDOUT, "client timed out");
+        ngx_log_error(NGX_LOG_ERR, c->log, NGX_ETIMEDOUT, "client timed out: ngx_http_process_request_line()");
+        ngx_log_error(NGX_LOG_ERR, c->log, NGX_ETIMEDOUT, "== request line: \"%V\"", &r->request_line);
         c->timedout = 1;
         ngx_http_close_request(r, NGX_HTTP_REQUEST_TIME_OUT);
         return;
@@ -939,6 +941,7 @@ ngx_http_process_request_line(ngx_event_t *rev)
             }
         }
 
+        // 解析请求行
         rc = ngx_http_parse_request_line(r, r->header_in);
 
         if (rc == NGX_OK) {
@@ -1013,6 +1016,7 @@ ngx_http_process_request_line(ngx_event_t *rev)
 
             c->log->action = "reading client request headers";
 
+            // 处理请求头
             rev->handler = ngx_http_process_request_headers;
             ngx_http_process_request_headers(rev);
 
@@ -1169,6 +1173,7 @@ ngx_http_process_request_uri(ngx_http_request_t *r)
 }
 
 
+// 处理请求头
 static void
 ngx_http_process_request_headers(ngx_event_t *rev)
 {
@@ -1190,7 +1195,27 @@ ngx_http_process_request_headers(ngx_event_t *rev)
                    "http process request header line");
 
     if (rev->timedout) {
-        ngx_log_error(NGX_LOG_INFO, c->log, NGX_ETIMEDOUT, "client timed out");
+        ngx_log_error(NGX_LOG_ERR, c->log, NGX_ETIMEDOUT, "client timed out: ngx_http_process_request_headers()");
+        ngx_log_error(NGX_LOG_ERR, c->log, NGX_ETIMEDOUT, "=== request line: \"%V\"", &r->request_line);
+        // r->header_in
+        ngx_log_error(NGX_LOG_ERR, c->log, 0, "=== clien sent header line: \"%*s\"",
+                      r->header_end - r->header_name_start, r->header_name_start);
+        // r->headers_in
+        ngx_list_t hds = r->headers_in.headers;
+        ngx_list_part_t *part = &hds.part;
+        ngx_table_elt_t *hhh = part->elts;
+        ngx_uint_t i;
+        for ( i = 0; ; i++ ) {
+            if (i >= part->nelts) {
+                if (part->next == NULL) {
+                    break;
+                }
+                part = part->next;
+                hhh = part->elts;
+                i=0;
+            }
+            ngx_log_error(NGX_LOG_ERR, c->log, 0, "=== request header %d: \"%V: %V\"", i, &hhh[i].key, &hhh[i].value);
+        }
         c->timedout = 1;
         ngx_http_close_request(r, NGX_HTTP_REQUEST_TIME_OUT);
         return;
@@ -1243,6 +1268,7 @@ ngx_http_process_request_headers(ngx_event_t *rev)
                 }
             }
 
+            // 读取请求头, -> header_in
             n = ngx_http_read_request_header(r);
 
             if (n == NGX_AGAIN || n == NGX_ERROR) {
@@ -1253,6 +1279,7 @@ ngx_http_process_request_headers(ngx_event_t *rev)
         /* the host header could change the server configuration context */
         cscf = ngx_http_get_module_srv_conf(r, ngx_http_core_module);
 
+        // 解析请求头, header_in -> header_name_start/end, header_start/end
         rc = ngx_http_parse_header_line(r, r->header_in,
                                         cscf->underscores_in_headers);
 
@@ -1273,6 +1300,7 @@ ngx_http_process_request_headers(ngx_event_t *rev)
 
             /* a header line has been parsed successfully */
 
+            // header_in -> headers_in.headers
             h = ngx_list_push(&r->headers_in.headers);
             if (h == NULL) {
                 ngx_http_close_request(r, NGX_HTTP_INTERNAL_SERVER_ERROR);
@@ -1327,12 +1355,14 @@ ngx_http_process_request_headers(ngx_event_t *rev)
 
             r->http_state = NGX_HTTP_PROCESS_REQUEST_STATE;
 
+            // 处理请求头
             rc = ngx_http_process_request_header(r);
 
             if (rc != NGX_OK) {
                 return;
             }
 
+            // 处理请求
             ngx_http_process_request(r);
 
             return;
@@ -1357,6 +1387,7 @@ ngx_http_process_request_headers(ngx_event_t *rev)
 }
 
 
+// 读取请求头
 static ssize_t
 ngx_http_read_request_header(ngx_http_request_t *r)
 {
@@ -1756,6 +1787,7 @@ ngx_http_process_multi_header_lines(ngx_http_request_t *r, ngx_table_elt_t *h,
 }
 
 
+// 处理请求头
 ngx_int_t
 ngx_http_process_request_header(ngx_http_request_t *r)
 {
@@ -1826,6 +1858,7 @@ ngx_http_process_request_header(ngx_http_request_t *r)
 }
 
 
+// 处理请求
 void
 ngx_http_process_request(ngx_http_request_t *r)
 {
@@ -1835,6 +1868,7 @@ ngx_http_process_request(ngx_http_request_t *r)
 
 #if (NGX_HTTP_SSL)
 
+    // https
     if (r->http_connection->ssl) {
         long                      rc;
         X509                     *cert;
@@ -1902,6 +1936,7 @@ ngx_http_process_request(ngx_http_request_t *r)
     c->write->handler = ngx_http_request_handler;
     r->read_event_handler = ngx_http_block_reading;
 
+    // 回调
     ngx_http_handler(r);
 
     ngx_http_run_posted_requests(c);
@@ -2624,8 +2659,8 @@ ngx_http_writer(ngx_http_request_t *r)
 
     if (wev->timedout) {
         if (!wev->delayed) {
-            ngx_log_error(NGX_LOG_INFO, c->log, NGX_ETIMEDOUT,
-                          "client timed out");
+            ngx_log_error(NGX_LOG_ERR, c->log, NGX_ETIMEDOUT,
+                          "client timed out: ngx_http_writer()");
             c->timedout = 1;
 
             ngx_http_finalize_request(r, NGX_HTTP_REQUEST_TIME_OUT);

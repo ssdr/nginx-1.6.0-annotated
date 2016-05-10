@@ -233,6 +233,7 @@ ngx_http_read_client_request_body_handler(ngx_http_request_t *r)
 
     if (r->connection->read->timedout) {
         r->connection->timedout = 1;
+        ngx_log_error(NGX_LOG_ERR, r->connection->log, NGX_ETIMEDOUT, "client timed out: ngx_http_read_client_request_body_handler()");
         ngx_http_finalize_request(r, NGX_HTTP_REQUEST_TIME_OUT);
         return;
     }

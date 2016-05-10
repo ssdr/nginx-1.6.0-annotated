@@ -827,6 +827,7 @@ ngx_module_t  ngx_http_core_module = {
 ngx_str_t  ngx_http_core_get_method = { 3, (u_char *) "GET " };
 
 
+// http请求处理回调函数
 void
 ngx_http_handler(ngx_http_request_t *r)
 {
@@ -872,6 +873,7 @@ ngx_http_handler(ngx_http_request_t *r)
 }
 
 
+// 运行核心阶段
 void
 ngx_http_core_run_phases(ngx_http_request_t *r)
 {
